@@ -5,10 +5,10 @@ require_once __DIR__ . '/idrac_config.php';
 
 date_default_timezone_set($CONFIG['timezone']);
 
-// State and log files
+// Small state file to avoid duplicate alert emails
 define('IDRAC_STATE_FILE', __DIR__ . '/idrac_state.json');
-define('LOG_FILE', __DIR__ . '/storage/temperature.log');
-define('GRAPH_CACHE_FILE', __DIR__ . '/storage/graph_cache.json');
+define('LOG_FILE', __DIR__ . '/idrac_log.csv');
+define('STORAGE_LOG_FILE', __DIR__ . '/storage/temperature.log');
 
 // =============== UTILS & STATE ===============
 function load_state(): array {
@@ -38,16 +38,12 @@ function format_ts($ts = null): string {
 function log_temperature(float $temp, string $status): void {
     $log_entry = sprintf('%s,%.1f,%s', format_ts(), $temp, $status) . PHP_EOL;
     @file_put_contents(LOG_FILE, $log_entry, FILE_APPEND | LOCK_EX);
-    
-    // Update graph cache
-    update_graph_cache($temp, $status);
 }
 
-function get_logs($limit = 1000): array {
+function get_logs(): array {
     $logs = [];
     if (file_exists(LOG_FILE)) {
         $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $lines = array_slice($lines, -$limit); // Get last N entries
         foreach ($lines as $line) {
             $parts = explode(',', $line);
             if (count($parts) === 3) {
@@ -62,364 +58,66 @@ function get_logs($limit = 1000): array {
     return $logs;
 }
 
-function update_graph_cache(float $temp, string $status): void {
-    $cache = [];
-    if (file_exists(GRAPH_CACHE_FILE)) {
-        $cache = json_decode(file_get_contents(GRAPH_CACHE_FILE), true) ?: [];
+function get_storage_logs(): array {
+    $logs = [];
+    if (file_exists(STORAGE_LOG_FILE)) {
+        $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            // Parse format: [2026-01-12 14:17:13] temp=16.00°C, ip=10.129.8.25
+            if (preg_match('/\[([^\]]+)\]\s*temp=([\d\.]+).*?ip=([\d\.]+)/', $line, $matches)) {
+                $logs[] = [
+                    'timestamp' => $matches[1],
+                    'temperature' => floatval($matches[2]),
+                    'ip' => $matches[3],
+                    'raw' => $line
+                ];
+            }
+        }
     }
-    
-    $current_hour = date('Y-m-d H');
-    if (!isset($cache[$current_hour])) {
-        $cache[$current_hour] = [
-            'min' => $temp,
-            'max' => $temp,
-            'avg' => $temp,
-            'count' => 1,
-            'status' => $status
-        ];
+    return array_slice($logs, -200); // Last 200 entries
+}
+
+function download_logs(string $type = 'csv'): void {
+    if ($type === 'storage') {
+        if (!file_exists(STORAGE_LOG_FILE)) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'No storage logs available']);
+            exit;
+        }
+        
+        header('Content-Type: text/plain');
+        header('Content-Disposition: attachment; filename="idrac_temperature_storage_' . date('Y-m-d') . '.log"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        
+        readfile(STORAGE_LOG_FILE);
+        exit;
     } else {
-        $cache[$current_hour]['min'] = min($cache[$current_hour]['min'], $temp);
-        $cache[$current_hour]['max'] = max($cache[$current_hour]['max'], $temp);
-        $cache[$current_hour]['avg'] = ($cache[$current_hour]['avg'] * $cache[$current_hour]['count'] + $temp) / ($cache[$current_hour]['count'] + 1);
-        $cache[$current_hour]['count']++;
-    }
-    
-    // Keep only last 72 hours (3 days)
-    if (count($cache) > 72) {
-        $cache = array_slice($cache, -72, 72, true);
-    }
-    
-    file_put_contents(GRAPH_CACHE_FILE, json_encode($cache, JSON_PRETTY_PRINT));
-}
+        if (!file_exists(LOG_FILE)) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'No logs available']);
+            exit;
+        }
 
-function get_graph_data(): array {
-    if (!file_exists(GRAPH_CACHE_FILE)) {
-        return ['labels' => [], 'temperatures' => [], 'statuses' => []];
-    }
-    
-    $cache = json_decode(file_get_contents(GRAPH_CACHE_FILE), true) ?: [];
-    $labels = [];
-    $temperatures = [];
-    $statuses = [];
-    
-    foreach ($cache as $hour => $data) {
-        $labels[] = date('M d H:00', strtotime($hour));
-        $temperatures[] = round($data['avg'], 1);
-        $statuses[] = $data['status'];
-    }
-    
-    return [
-        'labels' => $labels,
-        'temperatures' => $temperatures,
-        'statuses' => $statuses
-    ];
-}
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="idrac_temperature_log_' . date('Y-m-d') . '.csv"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
 
-function download_logs(): void {
-    if (!file_exists(LOG_FILE)) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'No logs available']);
+        echo "Timestamp,Temperature (°C),Status\n";
+        readfile(LOG_FILE);
         exit;
     }
-
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="idrac_temperature_log_' . date('Y-m-d_H-i') . '.csv"');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-
-    echo "Timestamp,Temperature (°C),Status\n";
-    readfile(LOG_FILE);
-    exit;
 }
 
-// =============== TEMPERATURE MONITOR ===============
-function get_iDRAC_temperature(): array {
-    global $CONFIG;
-
-    $url      = $CONFIG['idrac_url'] . '/redfish/v1/Chassis/System.Embedded.1/Thermal';
-    $username = $CONFIG['idrac_user'];
-    $password = $CONFIG['idrac_pass'];
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
-        CURLOPT_USERPWD        => "$username:$password",
-        CURLOPT_USERAGENT      => 'iDRAC-Monitor/2.0',
-        CURLOPT_HTTPHEADER     => ['Accept: application/json']
-    ]);
-
-    $response  = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    if ($http_code == 200 && $response) {
-        $data = json_decode($response, true);
-        if (isset($data['Temperatures']) && is_array($data['Temperatures'])) {
-            foreach ($data['Temperatures'] as $sensor) {
-                if (isset($sensor['ReadingCelsius'])) {
-                    $temp = $sensor['ReadingCelsius'] - 62; // Apply correction
-                    if ($temp >= 0 && $temp <= 100) {
-                        $status = get_temp_status($temp);
-                        $timestamp = format_ts();
-                        
-                        // Log every reading
-                        log_temperature($temp, $status);
-                        
-                        return [
-                            'success'     => true,
-                            'temperature' => $temp,
-                            'status'      => $status,
-                            'timestamp'   => $timestamp
-                        ];
-                    }
-                }
-            }
-        }
-    }
-
-    return [
-        'success' => false, 
-        'message' => 'Failed to get temperature',
-        'error' => $error ?: "HTTP $http_code"
-    ];
-}
-
-function get_temp_status($temp): string {
-    global $CONFIG;
-    if ($temp >= $CONFIG['critical_temp']) return 'CRITICAL';
-    if ($temp >= $CONFIG['warning_temp'])  return 'WARNING';
-    return 'NORMAL';
-}
-
-function get_status_color($status): string {
-    switch ($status) {
-        case 'NORMAL': return '#10b981';
-        case 'WARNING': return '#f59e0b';
-        case 'CRITICAL': return '#ef4444';
-        default: return '#6b7280';
-    }
-}
-
-// =============== EMAIL FUNCTIONS (unchanged) ===============
-function send_email(string $subject, string $message): bool {
-    global $CONFIG;
-    
-    $to = $CONFIG['email_to'];
-    $from = $CONFIG['email_from'];
-    $from_name = $CONFIG['email_from_name'];
-    
-    if ($CONFIG['transport'] === 'smtp' && $CONFIG['smtp_host'] === 'mrelay.intra.j-display.com') {
-        return send_email_internal_relay($subject, $message, $to, $from, $from_name);
-    }
-    
-    return send_email_simple($subject, $message, $to, $from, $from_name);
-}
-
-function send_email_internal_relay(string $subject, string $message, string $to, string $from, string $from_name): bool {
-    $headers = [];
-    $headers[] = "From: {$from_name} <{$from}>";
-    $headers[] = "Reply-To: {$from}";
-    $headers[] = "Return-Path: {$from}";
-    $headers[] = "MIME-Version: 1.0";
-    $headers[] = "Content-Type: text/plain; charset=UTF-8";
-    $headers[] = "Content-Transfer-Encoding: 8bit";
-    $headers[] = "X-Mailer: iDRAC-Monitor/2.0";
-    $headers[] = "X-Priority: 3";
-    
-    $headers_str = implode("\r\n", $headers);
-    
-    error_log("Attempting to send email via internal relay to: {$to}");
-    $result = @mail($to, $subject, $message, $headers_str);
-    
-    if ($result) {
-        error_log("Email sent successfully to: {$to}");
-    } else {
-        error_log("Failed to send email to: {$to}");
-        $result = send_email_alternative($subject, $message, $to, $from, $from_name);
-    }
-    
-    return $result;
-}
-
-function send_email_alternative(string $subject, string $message, string $to, string $from, string $from_name): bool {
-    global $CONFIG;
-    
-    $smtp_host = $CONFIG['smtp_host'];
-    $smtp_port = $CONFIG['smtp_port'];
-    
-    try {
-        $socket = @fsockopen($smtp_host, $smtp_port, $errno, $errstr, 10);
-        
-        if (!$socket) {
-            error_log("SMTP Connection failed to {$smtp_host}:{$smtp_port} - {$errstr} ({$errno})");
-            return false;
-        }
-        
-        // SMTP protocol handling (same as before)
-        $response = fgets($socket, 515);
-        fputs($socket, "HELO " . $_SERVER['SERVER_NAME'] . "\r\n");
-        $response = fgets($socket, 515);
-        fputs($socket, "MAIL FROM: <{$from}>\r\n");
-        $response = fgets($socket, 515);
-        
-        $recipients = explode(',', $to);
-        foreach ($recipients as $recipient) {
-            $recipient = trim($recipient);
-            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
-                fputs($socket, "RCPT TO: <{$recipient}>\r\n");
-                $response = fgets($socket, 515);
-            }
-        }
-        
-        fputs($socket, "DATA\r\n");
-        $response = fgets($socket, 515);
-        
-        $email_data = "From: {$from_name} <{$from}>\r\n";
-        $email_data .= "To: {$to}\r\n";
-        $email_data .= "Subject: {$subject}\r\n";
-        $email_data .= "MIME-Version: 1.0\r\n";
-        $email_data .= "Content-Type: text/plain; charset=UTF-8\r\n";
-        $email_data .= "\r\n";
-        $email_data .= $message . "\r\n";
-        $email_data .= ".\r\n";
-        
-        fputs($socket, $email_data);
-        $response = fgets($socket, 515);
-        fputs($socket, "QUIT\r\n");
-        fclose($socket);
-        
-        return true;
-    } catch (Exception $e) {
-        error_log("SMTP Error: " . $e->getMessage());
-        return false;
-    }
-}
-
-function send_email_simple(string $subject, string $message, string $to, string $from, string $from_name): bool {
-    $headers = [];
-    $headers[] = "From: {$from_name} <{$from}>";
-    $headers[] = "Reply-To: {$from}";
-    $headers[] = "MIME-Version: 1.0";
-    $headers[] = "Content-Type: text/plain; charset=UTF-8";
-    $headers_str = implode("\r\n", $headers);
-    
-    return @mail($to, $subject, $message, $headers_str);
-}
-
-function build_email_subject(string $kind, string $status, float $temp): string {
-    global $CONFIG;
-    $host = parse_url($CONFIG['idrac_url'], PHP_URL_HOST);
-    return sprintf('[iDRAC %s] %s — %.1f°C — %s', $kind, $status, $temp, $host);
-}
-
-function build_email_body(array $payload): string {
-    global $CONFIG;
-    $host = parse_url($CONFIG['idrac_url'], PHP_URL_HOST);
-
-    $lines = [
-        'iDRAC Temperature ' . ($payload['kind'] ?? 'Report'),
-        'Host: ' . $host,
-        'Status: ' . ($payload['status'] ?? 'UNKNOWN'),
-        'Temperature: ' . sprintf('%.1f°C', $payload['temperature'] ?? 0),
-        'Time: ' . ($payload['timestamp'] ?? format_ts()),
-    ];
-
-    if (isset($payload['duration'])) {
-        $lines[] = 'Duration: ' . $payload['duration'];
-    }
-
-    if (($payload['kind'] ?? '') === 'Alert') {
-        if ($payload['status'] === 'CRITICAL') {
-            $lines[] = 'Action: Immediate attention recommended (check cooling, workloads, iDRAC).';
-        } elseif ($payload['status'] === 'WARNING') {
-            $lines[] = 'Action: Monitor closely; investigate airflow and load.';
-        }
-    }
-
-    return implode("\n", $lines);
-}
-
-// =============== ALERT LOGIC ===============
-function check_extended_alerts(float $temp, string $status, string $timestamp): void {
-    global $CONFIG;
-    $state = load_state();
-    $current_time = time();
-    $send_alert = false;
-    $alert_type = '';
-    
-    if (in_array($status, ['WARNING', 'CRITICAL'], true) && 
-        $state['last_alert_status'] !== $status) {
-        $send_alert = true;
-        $alert_type = 'STATUS_CHANGE';
-        
-        if ($status === 'WARNING') {
-            $state['warning_start_time'] = $current_time;
-        } elseif ($status === 'CRITICAL') {
-            $state['critical_start_time'] = $current_time;
-        }
-    }
-    
-    if ($status === 'WARNING' && $state['warning_start_time'] !== null) {
-        $duration = $current_time - $state['warning_start_time'];
-        if ($duration >= 300 && $duration < 360) {
-            $send_alert = true;
-            $alert_type = 'PERSISTENT_WARNING';
-        }
-    }
-    
-    if ($status === 'CRITICAL' && $state['critical_start_time'] !== null) {
-        $duration = $current_time - $state['critical_start_time'];
-        if ($duration >= 300 && $duration < 360) {
-            $send_alert = true;
-            $alert_type = 'PERSISTENT_CRITICAL';
-        }
-    }
-    
-    if ($send_alert) {
-        $subject_prefix = '';
-        if ($alert_type === 'PERSISTENT_WARNING') {
-            $subject_prefix = '[Persistent Warning] ';
-        } elseif ($alert_type === 'PERSISTENT_CRITICAL') {
-            $subject_prefix = '[Persistent Critical] ';
-        }
-        
-        $subject = $subject_prefix . build_email_subject('Alert', $status, $temp);
-        $body = build_email_body([
-            'kind'        => 'Alert',
-            'status'      => $status,
-            'temperature' => $temp,
-            'timestamp'   => $timestamp,
-            'duration'    => ($alert_type === 'PERSISTENT_WARNING' || $alert_type === 'PERSISTENT_CRITICAL') ? '5+ minutes' : null
-        ]);
-        
-        if (send_email($subject, $body)) {
-            $state['last_alert_status'] = $status;
-            $state['last_alert_time'] = $timestamp;
-            save_state($state);
-        }
-    }
-    
-    if ($status === 'NORMAL') {
-        $state['warning_start_time'] = null;
-        $state['critical_start_time'] = null;
-    }
-    
-    $state['last_status'] = $status;
-    save_state($state);
-}
-
+// =============== HOURLY EMAIL FUNCTION ===============
 function send_hourly_email(): bool {
     global $CONFIG;
     
     $current_hour = (int)date('H');
     $state = load_state();
     
+    // Check if we've already sent an email this hour
     if ($state['last_hourly_email'] === $current_hour) {
         return false;
     }
@@ -445,6 +143,314 @@ function send_hourly_email(): bool {
     return false;
 }
 
+// =============== EXTENDED ALERT LOGIC ===============
+function check_extended_alerts(float $temp, string $status, string $timestamp): void {
+    global $CONFIG;
+    $state = load_state();
+    $current_time = time();
+    $send_alert = false;
+    $alert_type = '';
+    
+    // Check for status changes
+    if (in_array($status, ['WARNING', 'CRITICAL'], true) && 
+        $state['last_alert_status'] !== $status) {
+        $send_alert = true;
+        $alert_type = 'STATUS_CHANGE';
+        
+        // Update start times
+        if ($status === 'WARNING') {
+            $state['warning_start_time'] = $current_time;
+        } elseif ($status === 'CRITICAL') {
+            $state['critical_start_time'] = $current_time;
+        }
+    }
+    
+    // Check for 5-minute persistent alerts
+    if ($status === 'WARNING' && $state['warning_start_time'] !== null) {
+        $duration = $current_time - $state['warning_start_time'];
+        if ($duration >= 300 && $duration < 360) { // 5-6 minutes to avoid duplicates
+            $send_alert = true;
+            $alert_type = 'PERSISTENT_WARNING';
+        }
+    }
+    
+    if ($status === 'CRITICAL' && $state['critical_start_time'] !== null) {
+        $duration = $current_time - $state['critical_start_time'];
+        if ($duration >= 300 && $duration < 360) { // 5-6 minutes to avoid duplicates
+            $send_alert = true;
+            $alert_type = 'PERSISTENT_CRITICAL';
+        }
+    }
+    
+    // Send alert if needed
+    if ($send_alert) {
+        $subject_prefix = '';
+        if ($alert_type === 'PERSISTENT_WARNING') {
+            $subject_prefix = '[Persistent Warning] ';
+        } elseif ($alert_type === 'PERSISTENT_CRITICAL') {
+            $subject_prefix = '[Persistent Critical] ';
+        }
+        
+        $subject = $subject_prefix . build_email_subject('Alert', $status, $temp);
+        $body = build_email_body([
+            'kind'        => 'Alert',
+            'status'      => $status,
+            'temperature' => $temp,
+            'timestamp'   => $timestamp,
+            'duration'    => ($alert_type === 'PERSISTENT_WARNING' || $alert_type === 'PERSISTENT_CRITICAL') ? '5+ minutes' : null
+        ]);
+        
+        if (send_email($subject, $body)) {
+            $state['last_alert_status'] = $status;
+            $state['last_alert_time'] = $timestamp;
+            save_state($state);
+        }
+    }
+    
+    // Reset start times if status changed to normal
+    if ($status === 'NORMAL') {
+        $state['warning_start_time'] = null;
+        $state['critical_start_time'] = null;
+    }
+    
+    // Always update last status
+    $state['last_status'] = $status;
+    save_state($state);
+}
+
+// =============== TEMPERATURE MONITOR ===============
+function get_iDRAC_temperature(): array {
+    global $CONFIG;
+
+    $url      = $CONFIG['idrac_url'] . '/redfish/v1/Chassis/System.Embedded.1/Thermal';
+    $username = $CONFIG['idrac_user'];
+    $password = $CONFIG['idrac_pass'];
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL            => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
+        CURLOPT_USERPWD        => "$username:$password",
+        CURLOPT_USERAGENT      => 'iDRAC-Monitor/1.0',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json']
+    ]);
+
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($http_code == 200 && $response) {
+        $data = json_decode($response, true);
+        if (isset($data['Temperatures']) && is_array($data['Temperatures'])) {
+            foreach ($data['Temperatures'] as $sensor) {
+                if (isset($sensor['ReadingCelsius'])) {
+                    $temp = $sensor['ReadingCelsius'] - 62; // Apply correction
+                    if ($temp >= 0 && $temp <= 100) {
+                        $status = get_temp_status($temp);
+                        $timestamp = format_ts();
+                        
+                        // Log every 5 minutes
+                        $current_minute = (int)date('i');
+                        if ($current_minute % 5 === 0) {
+                            log_temperature($temp, $status);
+                        }
+                        
+                        return [
+                            'success'     => true,
+                            'temperature' => $temp,
+                            'status'      => $status,
+                            'timestamp'   => $timestamp
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    return ['success' => false, 'message' => 'Failed to get temperature'];
+}
+
+function get_temp_status($temp): string {
+    global $CONFIG;
+    if ($temp >= $CONFIG['critical_temp']) return 'CRITICAL';
+    if ($temp >= $CONFIG['warning_temp'])  return 'WARNING';
+    return 'NORMAL';
+}
+
+// =============== ENHANCED EMAIL FUNCTIONS ===============
+function send_email(string $subject, string $message): bool {
+    global $CONFIG;
+    
+    $to = $CONFIG['email_to'];
+    $from = $CONFIG['email_from'];
+    $from_name = $CONFIG['email_from_name'];
+    
+    // Use company internal relay (port 25, no auth)
+    if ($CONFIG['transport'] === 'smtp' && $CONFIG['smtp_host'] === 'mrelay.intra.j-display.com') {
+        return send_email_internal_relay($subject, $message, $to, $from, $from_name);
+    }
+    
+    // Fallback to standard mail() function
+    return send_email_simple($subject, $message, $to, $from, $from_name);
+}
+
+function send_email_internal_relay(string $subject, string $message, string $to, string $from, string $from_name): bool {
+    global $CONFIG;
+    
+    // Prepare headers
+    $headers = [];
+    $headers[] = "From: {$from_name} <{$from}>";
+    $headers[] = "Reply-To: {$from}";
+    $headers[] = "Return-Path: {$from}";
+    $headers[] = "MIME-Version: 1.0";
+    $headers[] = "Content-Type: text/plain; charset=UTF-8";
+    $headers[] = "Content-Transfer-Encoding: 8bit";
+    $headers[] = "X-Mailer: iDRAC-Monitor/1.0";
+    $headers[] = "X-Priority: 3";
+    
+    $headers_str = implode("\r\n", $headers);
+    
+    // Log email attempt
+    error_log("Attempting to send email via internal relay to: {$to}");
+    
+    // Use PHP's mail() function - it should use your server's MTA which is configured to use mrelay
+    $result = @mail($to, $subject, $message, $headers_str);
+    
+    if ($result) {
+        error_log("Email sent successfully to: {$to}");
+    } else {
+        error_log("Failed to send email to: {$to}");
+        // Try alternative method
+        $result = send_email_alternative($subject, $message, $to, $from, $from_name);
+    }
+    
+    return $result;
+}
+
+function send_email_alternative(string $subject, string $message, string $to, string $from, string $from_name): bool {
+    // Alternative: use fsockopen to directly connect to SMTP
+    global $CONFIG;
+    
+    $smtp_host = $CONFIG['smtp_host'];
+    $smtp_port = $CONFIG['smtp_port'];
+    
+    try {
+        $socket = @fsockopen($smtp_host, $smtp_port, $errno, $errstr, 10);
+        
+        if (!$socket) {
+            error_log("SMTP Connection failed to {$smtp_host}:{$smtp_port} - {$errstr} ({$errno})");
+            return false;
+        }
+        
+        // Read welcome message
+        $response = fgets($socket, 515);
+        
+        // Send HELO/EHLO
+        fputs($socket, "HELO " . $_SERVER['SERVER_NAME'] . "\r\n");
+        $response = fgets($socket, 515);
+        
+        // Set MAIL FROM
+        fputs($socket, "MAIL FROM: <{$from}>\r\n");
+        $response = fgets($socket, 515);
+        
+        // Set RCPT TO
+        $recipients = explode(',', $to);
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                fputs($socket, "RCPT TO: <{$recipient}>\r\n");
+                $response = fgets($socket, 515);
+            }
+        }
+        
+        // Send DATA
+        fputs($socket, "DATA\r\n");
+        $response = fgets($socket, 515);
+        
+        // Send email headers and body
+        $email_data = "From: {$from_name} <{$from}>\r\n";
+        $email_data .= "To: {$to}\r\n";
+        $email_data .= "Subject: {$subject}\r\n";
+        $email_data .= "MIME-Version: 1.0\r\n";
+        $email_data .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $email_data .= "\r\n";
+        $email_data .= $message . "\r\n";
+        $email_data .= ".\r\n";
+        
+        fputs($socket, $email_data);
+        $response = fgets($socket, 515);
+        
+        // Quit
+        fputs($socket, "QUIT\r\n");
+        fclose($socket);
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("SMTP Error: " . $e->getMessage());
+        return false;
+    }
+}
+
+function send_email_simple(string $subject, string $message, string $to, string $from, string $from_name): bool {
+    $headers = [];
+    $headers[] = "From: {$from_name} <{$from}>";
+    $headers[] = "Reply-To: {$from}";
+    $headers[] = "MIME-Version: 1.0";
+    $headers[] = "Content-Type: text/plain; charset=UTF-8";
+    $headers_str = implode("\r\n", $headers);
+    
+    return @mail($to, $subject, $message, $headers_str);
+}
+
+// =============== PROFESSIONAL EMAIL ===============
+function build_email_subject(string $kind, string $status, float $temp): string {
+    global $CONFIG;
+    $host = parse_url($CONFIG['idrac_url'], PHP_URL_HOST);
+    return sprintf('[iDRAC %s] %s — %.1f°C — %s', $kind, $status, $temp, $host);
+}
+
+function build_email_body(array $payload): string {
+    global $CONFIG;
+    $host = parse_url($CONFIG['idrac_url'], PHP_URL_HOST);
+
+    $lines = [
+        'iDRAC Temperature ' . ($payload['kind'] ?? 'Report'),
+        'Host: ' . $host,
+        'Status: ' . ($payload['status'] ?? 'UNKNOWN'),
+        'Temperature: ' . sprintf('%.1f°C', $payload['temperature'] ?? 0),
+        'Time: ' . ($payload['timestamp'] ?? format_ts()),
+    ];
+
+    // Add duration for persistent alerts
+    if (isset($payload['duration'])) {
+        $lines[] = 'Duration: ' . $payload['duration'];
+    }
+
+    // For alerts, optionally include a one-line recommendation
+    if (($payload['kind'] ?? '') === 'Alert') {
+        if ($payload['status'] === 'CRITICAL') {
+            $lines[] = 'Action: Immediate attention recommended (check cooling, workloads, iDRAC).';
+        } elseif ($payload['status'] === 'WARNING') {
+            $lines[] = 'Action: Monitor closely; investigate airflow and load.';
+        }
+    }
+
+    return implode("\n", $lines);
+}
+
+// Allow running the hourly email from CLI: `php idrac.php hourly`
+if (php_sapi_name() === 'cli') {
+    global $argv;
+    if (!empty($argv) && (in_array('hourly', $argv, true) || in_array('--hourly', $argv, true))) {
+        send_hourly_email();
+        exit(0);
+    }
+}
+
 // =============== API ENDPOINTS ===============
 if (isset($_GET['action'])) {
     header('Content-Type: application/json');
@@ -453,7 +459,10 @@ if (isset($_GET['action'])) {
         case 'get_temp':
             $result = get_iDRAC_temperature();
             if ($result['success']) {
+                // Check for extended alerts (5-minute persistent alerts)
                 check_extended_alerts($result['temperature'], $result['status'], $result['timestamp']);
+                
+                // Check for hourly email
                 send_hourly_email();
             }
             echo json_encode($result);
@@ -502,17 +511,32 @@ if (isset($_GET['action'])) {
             break;
 
         case 'download_logs':
-            download_logs();
+            $type = $_GET['type'] ?? 'csv';
+            download_logs($type);
             break;
-
-        case 'get_logs':
-            $logs = get_logs(100);
-            echo json_encode(['success' => true, 'logs' => $logs]);
+            
+        case 'get_storage_logs':
+            $logs = get_storage_logs();
+            echo json_encode([
+                'success' => true,
+                'logs' => $logs,
+                'count' => count($logs)
+            ]);
             break;
-
+            
         case 'get_graph_data':
-            $data = get_graph_data();
-            echo json_encode(['success' => true, 'data' => $data]);
+            $logs = get_storage_logs();
+            $data = [];
+            foreach ($logs as $log) {
+                $data[] = [
+                    'x' => $log['timestamp'],
+                    'y' => $log['temperature']
+                ];
+            }
+            echo json_encode([
+                'success' => true,
+                'data' => $data
+            ]);
             break;
 
         default:
@@ -521,7 +545,7 @@ if (isset($_GET['action'])) {
     exit;
 }
 
-// =============== ENHANCED HTML INTERFACE ===============
+// =============== HTML INTERFACE ===============
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -529,7 +553,7 @@ if (isset($_GET['action'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iTM - iDRAC Temperature Monitor</title>
-    <!-- Chart.js for graphs -->
+    <!-- Chart.js for graphing -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -554,32 +578,33 @@ if (isset($_GET['action'])) {
         }
         
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #1e293b 100%);
             color: var(--text-primary);
             min-height: 100vh;
             overflow-x: hidden;
-            padding: 20px;
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
+            padding: 20px;
             display: grid;
             grid-template-columns: 1fr;
             gap: 24px;
         }
         
-        /* Enhanced Header with Logo */
+        /* Header */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 24px;
-            background: var(--bg-secondary);
-            border-radius: 16px;
+            padding: 20px 30px;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
             border: 1px solid var(--border);
-            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
         
         .logo-container {
@@ -589,43 +614,40 @@ if (isset($_GET['action'])) {
         }
         
         .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #3b82f6, #10b981);
-            border-radius: 16px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            border-radius: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 32px;
+            font-size: 24px;
             color: white;
-            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
+            overflow: hidden;
         }
         
-        .logo iTM {
-            font-size: 36px;
-            letter-spacing: 1px;
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
-        .header-title {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .header-title h1 {
+        .header h1 {
             font-size: 32px;
             font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #10b981);
+            background: linear-gradient(135deg, var(--text-primary) 0%, #cbd5e1 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 1px;
         }
         
-        .header-title p {
+        .header-subtitle {
             font-size: 14px;
             color: var(--text-muted);
-            max-width: 400px;
+            margin-top: 5px;
+            font-weight: 400;
         }
         
         .refresh-indicator {
@@ -634,8 +656,8 @@ if (isset($_GET['action'])) {
             gap: 12px;
             font-size: 14px;
             color: var(--text-muted);
-            background: var(--bg-card);
-            padding: 12px 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
             border: 1px solid var(--border);
         }
@@ -649,8 +671,14 @@ if (isset($_GET['action'])) {
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.1); }
+            0%, 100% { 
+                opacity: 1; 
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            50% { 
+                opacity: 0.7;
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
         }
         
         /* Main Dashboard Grid */
@@ -660,129 +688,122 @@ if (isset($_GET['action'])) {
             gap: 24px;
         }
         
-        @media (max-width: 1024px) {
+        @media (max-width: 1200px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
             }
         }
         
-        /* Enhanced Temperature Card with Colored Text */
+        /* Temperature Card */
         .temp-card {
-            background: var(--bg-card);
-            border-radius: 20px;
+            background: rgba(51, 65, 85, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
             padding: 40px;
             border: 1px solid var(--border);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
         }
         
         .temp-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
         }
         
         .temp-label {
-            font-size: 16px;
+            font-size: 14px;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 16px;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
             font-weight: 600;
         }
         
         .temp-display {
-            font-size: 88px;
-            font-weight: 900;
+            font-size: 96px;
+            font-weight: 800;
             margin: 20px 0;
             line-height: 1;
             transition: color 0.3s ease;
+            text-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
         }
         
-        /* Status indicator */
+        .temp-normal { color: var(--success); }
+        .temp-warning { color: var(--warning); }
+        .temp-critical { color: var(--critical); }
+        .temp-unknown { color: var(--unknown); }
+        
         .status {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 14px 32px;
-            border-radius: 24px;
+            display: inline-block;
+            padding: 12px 32px;
+            border-radius: 30px;
             font-weight: 700;
             font-size: 16px;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             text-transform: uppercase;
-            margin: 16px 0;
+            margin: 15px 0;
+            border: 2px solid;
             backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
         }
-        
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        
-        .normal .status-dot { background: var(--success); }
-        .warning .status-dot { background: var(--warning); }
-        .critical .status-dot { background: var(--critical); }
-        .unknown .status-dot { background: var(--unknown); }
         
         .normal { 
-            background: rgba(16, 185, 129, 0.15); 
-            color: var(--success); 
-            border: 2px solid var(--success);
+            background: rgba(16, 185, 129, 0.2); 
+            color: var(--success);
+            border-color: var(--success);
         }
         .warning { 
-            background: rgba(245, 158, 11, 0.15); 
-            color: var(--warning); 
-            border: 2px solid var(--warning);
+            background: rgba(245, 158, 11, 0.2); 
+            color: var(--warning);
+            border-color: var(--warning);
         }
         .critical { 
-            background: rgba(239, 68, 68, 0.15); 
-            color: var(--critical); 
-            border: 2px solid var(--critical);
+            background: rgba(239, 68, 68, 0.2); 
+            color: var(--critical);
+            border-color: var(--critical);
         }
         .unknown { 
-            background: rgba(107, 114, 128, 0.15); 
-            color: var(--unknown); 
-            border: 2px solid var(--unknown);
+            background: rgba(107, 114, 128, 0.2); 
+            color: var(--unknown);
+            border-color: var(--unknown);
         }
         
         .meta {
             color: var(--text-muted);
             font-size: 14px;
-            margin-top: 12px;
+            margin-top: 15px;
             text-align: center;
         }
         
         /* Stats Grid */
-        .stats {
+        .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            gap: 20px;
             margin-top: 40px;
             width: 100%;
         }
         
-        .stat {
-            background: var(--bg-secondary);
-            padding: 24px;
+        .stat-card {
+            background: rgba(30, 41, 59, 0.6);
+            padding: 25px;
             border-radius: 16px;
             text-align: center;
             border: 1px solid var(--border);
             transition: all 0.3s ease;
         }
         
-        .stat:hover {
-            transform: translateY(-2px);
-            border-color: var(--accent);
+        .stat-card:hover {
+            background: rgba(30, 41, 59, 0.8);
+            transform: translateY(-3px);
         }
         
         .stat-value {
-            font-size: 28px;
-            font-weight: 800;
+            font-size: 32px;
+            font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 8px;
         }
@@ -792,135 +813,46 @@ if (isset($_GET['action'])) {
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 1px;
-        }
-        
-        /* Graph Container */
-        .graph-container {
-            background: var(--bg-card);
-            border-radius: 20px;
-            padding: 30px;
-            border: 1px solid var(--border);
-            grid-column: 1 / -1;
-            margin-top: 24px;
-        }
-        
-        .graph-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-        
-        .graph-header h3 {
-            font-size: 20px;
             font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .graph-controls {
-            display: flex;
-            gap: 12px;
-        }
-        
-        .graph-btn {
-            padding: 10px 20px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
-        
-        .graph-btn:hover {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
-        }
-        
-        .graph-canvas-container {
-            height: 400px;
-            position: relative;
-        }
-        
-        /* History Logs */
-        .history-container {
-            background: var(--bg-card);
-            border-radius: 20px;
-            padding: 30px;
-            border: 1px solid var(--border);
-            margin-top: 24px;
-        }
-        
-        .history-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-        
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        
-        .history-table th {
-            background: rgba(30, 41, 59, 0.8);
-            padding: 16px;
-            text-align: left;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .history-table td {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text-secondary);
-        }
-        
-        .history-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .history-table tr:hover {
-            background: rgba(59, 130, 246, 0.1);
         }
         
         /* Controls Panel */
         .controls-panel {
-            background: var(--bg-card);
-            border-radius: 20px;
-            padding: 30px;
+            background: rgba(51, 65, 85, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 40px;
             border: 1px solid var(--border);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .panel-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 30px;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            gap: 12px;
         }
         
         .controls-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 16px;
-            margin: 24px 0;
+            margin-bottom: 30px;
         }
         
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
             .controls-grid {
                 grid-template-columns: 1fr;
             }
         }
         
-        button {
-            padding: 18px;
+        .btn {
+            padding: 22px;
             border: none;
-            border-radius: 14px;
+            border-radius: 16px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -929,41 +861,169 @@ if (isset($_GET['action'])) {
             align-items: center;
             justify-content: center;
             gap: 12px;
-            min-height: 64px;
-            background: var(--bg-secondary);
+            background: rgba(30, 41, 59, 0.8);
             color: var(--text-primary);
-            border: 2px solid var(--border);
+            border: 1px solid var(--border);
         }
         
-        button:hover {
-            background: var(--accent);
-            transform: translateY(-2px);
-            border-color: var(--accent);
-            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
         }
         
         .btn-primary { 
-            background: var(--accent); 
-            border-color: var(--accent); 
-            color: white;
+            background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+            border: none;
         }
         
         .btn-success { 
-            background: var(--success); 
-            border-color: var(--success); 
-            color: white;
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            border: none;
         }
         
         .btn-warning { 
-            background: var(--warning); 
-            border-color: var(--warning); 
-            color: white;
+            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+            border: none;
         }
         
         .btn-danger { 
-            background: var(--critical); 
-            border-color: var(--critical); 
+            background: linear-gradient(135deg, var(--critical) 0%, #dc2626 100%);
+            border: none;
+        }
+        
+        .btn-info { 
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+            border: none;
+        }
+        
+        /* Thresholds */
+        .thresholds {
+            margin-top: 40px;
+        }
+        
+        .threshold-list {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .threshold-item {
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .threshold-normal { 
+            background: rgba(16, 185, 129, 0.2); 
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+        .threshold-warning { 
+            background: rgba(245, 158, 11, 0.2); 
+            color: var(--warning);
+            border: 1px solid var(--warning);
+        }
+        .threshold-critical { 
+            background: rgba(239, 68, 68, 0.2); 
+            color: var(--critical);
+            border: 1px solid var(--critical);
+        }
+        
+        /* Graphs Section */
+        .graphs-section {
+            grid-column: 1 / -1;
+            background: rgba(51, 65, 85, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 40px;
+            border: 1px solid var(--border);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .graphs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .graph-container {
+            height: 400px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        
+        .graph-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            background: var(--accent);
             color: white;
+            border-color: var(--accent);
+        }
+        
+        .tab:hover:not(.active) {
+            background: rgba(30, 41, 59, 0.8);
+        }
+        
+        /* Logs Table */
+        .logs-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .logs-table th {
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            padding: 16px;
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid var(--border);
+        }
+        
+        .logs-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        
+        .logs-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
         }
         
         /* Notification */
@@ -971,29 +1031,29 @@ if (isset($_GET['action'])) {
             position: fixed;
             top: 30px;
             right: 30px;
-            padding: 20px 28px;
-            border-radius: 14px;
-            background: var(--bg-card);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+            padding: 20px 30px;
+            border-radius: 16px;
+            background: rgba(51, 65, 85, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
             display: none;
             z-index: 1000;
-            animation: slideIn 0.3s ease;
+            animation: slideInRight 0.3s ease;
             border-left: 5px solid var(--success);
-            max-width: 350px;
             border: 1px solid var(--border);
-            backdrop-filter: blur(10px);
+            max-width: 350px;
         }
         
         .notification.error {
             border-left-color: var(--critical);
         }
         
-        @keyframes slideIn {
+        @keyframes slideInRight {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
         
-        /* Loading Spinner */
+        /* Loading */
         .loading {
             display: none;
             position: fixed;
@@ -1002,19 +1062,21 @@ if (isset($_GET['action'])) {
             transform: translate(-50%, -50%);
             z-index: 1000;
             background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
             padding: 40px;
             border-radius: 20px;
-            backdrop-filter: blur(10px);
             border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
         }
         
         .spinner {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             border: 4px solid var(--border);
             border-top: 4px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
         }
         
         @keyframes spin {
@@ -1022,48 +1084,89 @@ if (isset($_GET['action'])) {
             100% { transform: rotate(360deg); }
         }
         
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 20px;
-                text-align: center;
-            }
-            
-            .logo-container {
-                flex-direction: column;
-            }
-            
-            .temp-display {
-                font-size: 64px;
-            }
-            
-            .stats {
-                grid-template-columns: 1fr;
-            }
-            
-            .graph-canvas-container {
-                height: 300px;
-            }
+        .loading-text {
+            color: var(--text-primary);
+            font-size: 16px;
+            text-align: center;
+        }
+        
+        /* System Status */
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 20px;
+            padding: 12px 20px;
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.online { 
+            background: var(--success); 
+            box-shadow: 0 0 15px var(--success);
+        }
+        .status-dot.offline { 
+            background: var(--critical); 
+            box-shadow: 0 0 15px var(--critical);
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            font-size: 14px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+        
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Enhanced Header with Logo -->
+        <!-- Header -->
         <div class="header">
             <div class="logo-container">
                 <div class="logo">
-                    <iTM>iTM</iTM>
+                    <!-- Placeholder for your logo - replace with actual logo -->
+                    <div style="color: white; font-weight: 800; font-size: 20px;">iTM</div>
                 </div>
-                <div class="header-title">
-                    <h1>iDRAC Temperature Monitor</h1>
-                    <p>Real-time temperature monitoring and alert system for Dell iDRAC servers</p>
+                <div>
+                    <h1>iTM</h1>
+                    <div class="header-subtitle">iDRAC Temperature Monitoring System</div>
                 </div>
             </div>
+            
             <div class="refresh-indicator">
                 <div class="refresh-dot"></div>
-                Auto-refresh: <?php echo (int)$CONFIG['check_interval']; ?> minutes
+                <span>Auto-refresh: <?php echo (int)$CONFIG['check_interval']; ?> minutes</span>
             </div>
         </div>
 
@@ -1073,23 +1176,25 @@ if (isset($_GET['action'])) {
             <div class="temp-card">
                 <div class="temp-label">Current Temperature</div>
                 <div class="temp-display" id="temperature">-- °C</div>
-                <div class="status unknown" id="statusIndicator">
-                    <div class="status-dot"></div>
-                    <span>UNKNOWN</span>
-                </div>
+                <div class="status unknown" id="statusIndicator">UNKNOWN</div>
                 <div id="lastUpdate" class="meta">Last updated: --</div>
                 
-                <div class="stats">
-                    <div class="stat">
-                        <div class="stat-value" id="minTemp">--°C</div>
+                <div class="system-status">
+                    <div class="status-dot online"></div>
+                    <span>iDRAC Connection: Active</span>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="minTemp">--</div>
                         <div class="stat-label">Min Today</div>
                     </div>
-                    <div class="stat">
-                        <div class="stat-value" id="avgTemp">--°C</div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avgTemp">--</div>
                         <div class="stat-label">Average</div>
                     </div>
-                    <div class="stat">
-                        <div class="stat-value" id="maxTemp">--°C</div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="maxTemp">--</div>
                         <div class="stat-label">Max Today</div>
                     </div>
                 </div>
@@ -1097,202 +1202,150 @@ if (isset($_GET['action'])) {
 
             <!-- Controls Panel -->
             <div class="controls-panel">
-                <div style="font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;">
-                    System Controls
+                <div class="panel-title">
+                    <span>📊</span> Monitoring Controls
                 </div>
                 
                 <div class="controls-grid">
-                    <button class="btn-primary" onclick="getTemperature()">
-                        <span>📊</span>
+                    <button class="btn btn-primary" onclick="getTemperature()">
+                        <span>🔄</span>
                         Refresh Temperature
                     </button>
-                    <button class="btn-success" onclick="sendReport()">
+                    <button class="btn btn-success" onclick="sendReport()">
                         <span>📧</span>
-                        Send Report
+                        Send Report Email
                     </button>
-                    <button class="btn-warning" onclick="sendTestEmail()">
+                    <button class="btn btn-warning" onclick="sendTestEmail()">
                         <span>🧪</span>
-                        Test Email
+                        Test Email Config
                     </button>
-                    <button class="btn-danger" onclick="downloadLogs()">
-                        <span>📥</span>
-                        Download Logs
+                    <button class="btn btn-info" onclick="showLogs()">
+                        <span>📋</span>
+                        View Logs
                     </button>
                 </div>
                 
-                <div style="margin-top: 30px;">
-                    <div style="font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">
-                        Temperature Thresholds
+                <div class="thresholds">
+                    <div class="panel-title" style="margin-bottom: 20px;">
+                        <span>⚠️</span> Temperature Thresholds
                     </div>
-                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                        <span style="padding: 8px 16px; background: rgba(16, 185, 129, 0.15); color: var(--success); border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--success);">
+                    <div class="threshold-list">
+                        <span class="threshold-item threshold-normal">
+                            <span>●</span>
                             Normal &lt; <?php echo $CONFIG['warning_temp']; ?>°C
                         </span>
-                        <span style="padding: 8px 16px; background: rgba(245, 158, 11, 0.15); color: var(--warning); border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--warning);">
+                        <span class="threshold-item threshold-warning">
+                            <span>●</span>
                             Warning ≥ <?php echo $CONFIG['warning_temp']; ?>°C
                         </span>
-                        <span style="padding: 8px 16px; background: rgba(239, 68, 68, 0.15); color: var(--critical); border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--critical);">
+                        <span class="threshold-item threshold-critical">
+                            <span>●</span>
                             Critical ≥ <?php echo $CONFIG['critical_temp']; ?>°C
                         </span>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Live Graph -->
-        <div class="graph-container">
-            <div class="graph-header">
-                <h3>Temperature Trend (Live)</h3>
-                <div class="graph-controls">
-                    <button class="graph-btn" onclick="updateGraph('24h')">24 Hours</button>
-                    <button class="graph-btn" onclick="updateGraph('7d')">7 Days</button>
-                    <button class="graph-btn" onclick="updateGraph('30d')">30 Days</button>
+                
+                <div class="system-status" style="margin-top: 30px;">
+                    <div class="status-dot <?php echo $CONFIG['smtp_auth'] ? 'online' : 'offline'; ?>"></div>
+                    <span>SMTP: <?php echo htmlspecialchars($CONFIG['smtp_host']); ?>:<?php echo htmlspecialchars($CONFIG['smtp_port']); ?></span>
                 </div>
             </div>
-            <div class="graph-canvas-container">
-                <canvas id="temperatureChart"></canvas>
-            </div>
         </div>
 
-        <!-- History Logs -->
-        <div class="history-container">
-            <div class="history-header">
-                <h3>Recent Temperature Logs</h3>
-                <button class="graph-btn" onclick="loadHistory()">
-                    <span>🔄</span>
-                    Refresh Logs
-                </button>
+        <!-- Graphs & Logs Section -->
+        <div class="graphs-section">
+            <div class="graphs-header">
+                <div class="graph-title">Temperature Analytics & Logs</div>
+                <div class="tabs">
+                    <div class="tab active" onclick="showTab('graph')">Live Graph</div>
+                    <div class="tab" onclick="showTab('history')">History Graph</div>
+                    <div class="tab" onclick="showTab('logs')">Raw Logs</div>
+                </div>
             </div>
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Temperature</th>
-                        <th>Status</th>
-                        <th>IP Address</th>
-                    </tr>
-                </thead>
-                <tbody id="historyBody">
-                    <tr><td colspan="4" style="text-align: center; padding: 40px; color: var(--text-muted);">Loading temperature logs...</td></tr>
-                </tbody>
-            </table>
+            
+            <!-- Graph Container -->
+            <div id="graph-tab" class="tab-content">
+                <div class="graph-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn btn-info" onclick="downloadCSV()">
+                        <span>📥</span>
+                        Download CSV Logs
+                    </button>
+                    <button class="btn btn-info" onclick="downloadStorageLogs()">
+                        <span>📥</span>
+                        Download Storage Logs
+                    </button>
+                    <button class="btn btn-primary" onclick="refreshGraph()">
+                        <span>🔄</span>
+                        Refresh Graph
+                    </button>
+                </div>
+            </div>
+            
+            <!-- History Graph Container -->
+            <div id="history-tab" class="tab-content" style="display: none;">
+                <div class="graph-container">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Logs Table Container -->
+            <div id="logs-tab" class="tab-content" style="display: none;">
+                <div class="logs-table-container">
+                    <table class="logs-table" id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Temperature</th>
+                                <th>Status</th>
+                                <th>Source IP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button class="btn btn-primary" onclick="refreshLogs()">
+                        <span>🔄</span>
+                        Refresh Logs
+                    </button>
+                    <button class="btn btn-info" onclick="clearLogs()">
+                        <span>🗑️</span>
+                        Clear Table
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>iTM v2.0 • iDRAC Temperature Monitoring System • Last Updated: <?php echo date('Y-m-d H:i:s'); ?></p>
+            <p style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                Monitoring: <?php echo htmlspecialchars(parse_url($CONFIG['idrac_url'], PHP_URL_HOST)); ?> • 
+                Email: <?php echo htmlspecialchars($CONFIG['email_to']); ?>
+            </p>
         </div>
     </div>
 
     <!-- Notification -->
     <div class="notification" id="notification"></div>
     
-    <!-- Loading Spinner -->
+    <!-- Loading Overlay -->
     <div class="loading" id="loading">
         <div class="spinner"></div>
+        <div class="loading-text">Processing...</div>
     </div>
 
     <script>
         const AUTO_REFRESH_MS = <?php echo (int)$CONFIG['check_interval']; ?> * 60000;
-        let temperatureChart = null;
+        let tempChart = null;
+        let historyChart = null;
+        let currentTemp = null;
         let currentStatus = 'UNKNOWN';
-
-        // Initialize Chart.js
-        function initChart() {
-            const ctx = document.getElementById('temperatureChart').getContext('2d');
-            temperatureChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Temperature (°C)',
-                        data: [],
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: function(context) {
-                            const index = context.dataIndex;
-                            const status = context.chart.data.statuses?.[index];
-                            return getStatusColor(status);
-                        },
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: {
-                                color: '#cbd5e1',
-                                font: {
-                                    size: 14
-                                }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                            titleColor: '#f1f5f9',
-                            bodyColor: '#cbd5e1',
-                            borderColor: '#475569',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function(context) {
-                                    const status = context.chart.data.statuses?.[context.dataIndex];
-                                    return `Temperature: ${context.parsed.y}°C (${status})`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(71, 85, 105, 0.3)'
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                maxRotation: 45
-                            }
-                        },
-                        y: {
-                            grid: {
-                                color: 'rgba(71, 85, 105, 0.3)'
-                            },
-                            ticks: {
-                                color: '#94a3b8'
-                            },
-                            suggestedMin: 0,
-                            suggestedMax: 40
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    }
-                }
-            });
-            updateGraph('24h');
-        }
-
-        function getStatusColor(status) {
-            switch(status) {
-                case 'NORMAL': return '#10b981';
-                case 'WARNING': return '#f59e0b';
-                case 'CRITICAL': return '#ef4444';
-                default: return '#6b7280';
-            }
-        }
-
-        function updateTempColor(temp, status) {
-            const tempElement = document.getElementById('temperature');
-            tempElement.style.color = getStatusColor(status);
-            
-            const statusElement = document.getElementById('statusIndicator');
-            statusElement.className = 'status ' + status.toLowerCase();
-            statusElement.innerHTML = `<div class="status-dot"></div><span>${status}</span>`;
-            
-            currentStatus = status;
-        }
 
         async function getTemperature() {
             showLoading(true);
@@ -1301,104 +1354,40 @@ if (isset($_GET['action'])) {
                 const data = await response.json();
 
                 if (data.success) {
-                    const temp = data.temperature.toFixed(1);
-                    document.getElementById('temperature').textContent = temp + ' °C';
+                    currentTemp = data.temperature;
+                    currentStatus = data.status;
+                    
+                    // Update temperature display with color
+                    const tempEl = document.getElementById('temperature');
+                    tempEl.textContent = data.temperature.toFixed(1) + ' °C';
+                    tempEl.className = 'temp-display temp-' + data.status.toLowerCase();
+                    
+                    // Update status indicator
+                    const statusEl = document.getElementById('statusIndicator');
+                    statusEl.textContent = data.status;
+                    statusEl.className = 'status ' + data.status.toLowerCase();
+                    
+                    // Update timestamp
                     document.getElementById('lastUpdate').textContent = 'Last updated: ' + (data.timestamp || '');
                     
-                    updateTempColor(temp, data.status);
-                    updateStats(temp, data.status);
-                    showNotification(`Temperature: ${temp}°C - ${data.status}`, 'success');
+                    // Show notification
+                    showNotification('Temperature: ' + data.temperature.toFixed(1) + '°C — ' + data.status, 'success');
                     
-                    // Update graph with new data
-                    await updateGraphData();
+                    // Update stats
+                    updateStats(data.temperature);
+                    
+                    // Send to log API
+                    await sendTempToLog(data.temperature);
+                    
+                    // Update graph if active
+                    if (tempChart) {
+                        updateChart(data.temperature, data.timestamp);
+                    }
                 } else {
                     showNotification('Error: ' + (data.message || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 showNotification('Network error: ' + error.message, 'error');
-            }
-            showLoading(false);
-        }
-
-        async function updateGraph(timeRange) {
-            showLoading(true);
-            try {
-                const response = await fetch('?action=get_graph_data');
-                const data = await response.json();
-                
-                if (data.success && temperatureChart) {
-                    let labels = data.data.labels;
-                    let temperatures = data.data.temperatures;
-                    let statuses = data.data.statuses;
-                    
-                    // Filter based on time range
-                    if (timeRange === '24h') {
-                        labels = labels.slice(-24);
-                        temperatures = temperatures.slice(-24);
-                        statuses = statuses.slice(-24);
-                    } else if (timeRange === '7d') {
-                        labels = labels.slice(-168); // 24 * 7
-                        temperatures = temperatures.slice(-168);
-                        statuses = statuses.slice(-168);
-                    }
-                    
-                    temperatureChart.data.labels = labels;
-                    temperatureChart.data.datasets[0].data = temperatures;
-                    temperatureChart.data.statuses = statuses;
-                    temperatureChart.update();
-                }
-            } catch (error) {
-                console.error('Failed to update graph:', error);
-            }
-            showLoading(false);
-        }
-
-        async function updateGraphData() {
-            try {
-                const response = await fetch('?action=get_graph_data');
-                const data = await response.json();
-                
-                if (data.success && temperatureChart) {
-                    // Get last 24 hours
-                    const labels = data.data.labels.slice(-24);
-                    const temperatures = data.data.temperatures.slice(-24);
-                    const statuses = data.data.statuses.slice(-24);
-                    
-                    temperatureChart.data.labels = labels;
-                    temperatureChart.data.datasets[0].data = temperatures;
-                    temperatureChart.data.statuses = statuses;
-                    temperatureChart.update('none');
-                }
-            } catch (error) {
-                console.error('Failed to update graph data:', error);
-            }
-        }
-
-        async function loadHistory() {
-            showLoading(true);
-            try {
-                const response = await fetch('?action=get_logs');
-                const data = await response.json();
-
-                if (data.success && data.logs.length > 0) {
-                    const tbody = document.getElementById('historyBody');
-                    tbody.innerHTML = data.logs.slice().reverse().map(item => {
-                        const statusColor = getStatusColor(item.status);
-                        return `
-                            <tr>
-                                <td>${item.timestamp}</td>
-                                <td><strong style="color: ${statusColor}">${item.temperature}°C</strong></td>
-                                <td><span style="display: inline-block; padding: 4px 12px; background: ${statusColor}20; color: ${statusColor}; border-radius: 12px; font-size: 12px; font-weight: 600; border: 1px solid ${statusColor};">${item.status}</span></td>
-                                <td><code>${item.ip || 'N/A'}</code></td>
-                            </tr>
-                        `;
-                    }).join('');
-                } else {
-                    document.getElementById('historyBody').innerHTML = 
-                        '<tr><td colspan="4" style="text-align: center; padding: 40px; color: var(--text-muted);">No temperature logs available</td></tr>';
-                }
-            } catch (error) {
-                showNotification('Failed to load history: ' + error.message, 'error');
             }
             showLoading(false);
         }
@@ -1427,19 +1416,371 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        async function downloadLogs() {
-            window.open('?action=download_logs', '_blank');
+        function downloadCSV() {
+            window.open('?action=download_logs&type=csv', '_blank');
         }
 
-        function updateStats(currentTemp, status) {
+        function downloadStorageLogs() {
+            window.open('?action=download_logs&type=storage', '_blank');
+        }
+
+        async function showLogs() {
+            showTab('logs');
+            await refreshLogs();
+        }
+
+        async function refreshLogs() {
+            showLoading(true);
+            try {
+                const response = await fetch('?action=get_storage_logs');
+                const data = await response.json();
+                
+                if (data.success && data.logs.length > 0) {
+                    const tbody = document.getElementById('logsBody');
+                    tbody.innerHTML = data.logs.slice().reverse().map(log => `
+                        <tr>
+                            <td>${log.timestamp}</td>
+                            <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
+                            <td>
+                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 5px 12px; font-size: 12px;">
+                                    ${getStatusText(log.temperature)}
+                                </span>
+                            </td>
+                            <td><code>${log.ip}</code></td>
+                        </tr>
+                    `).join('');
+                } else {
+                    document.getElementById('logsBody').innerHTML = 
+                        '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs available</td></tr>';
+                }
+            } catch (error) {
+                showNotification('Failed to load logs: ' + error.message, 'error');
+            }
+            showLoading(false);
+        }
+
+        function clearLogs() {
+            document.getElementById('logsBody').innerHTML = 
+                '<tr><td colspan="4" style="text-align: center; padding: 40px;">Logs cleared</td></tr>';
+        }
+
+        function getStatusClass(temp) {
+            const warning = <?php echo $CONFIG['warning_temp']; ?>;
+            const critical = <?php echo $CONFIG['critical_temp']; ?>;
+            
+            if (temp >= critical) return 'critical';
+            if (temp >= warning) return 'warning';
+            return 'normal';
+        }
+
+        function getStatusText(temp) {
+            const warning = <?php echo $CONFIG['warning_temp']; ?>;
+            const critical = <?php echo $CONFIG['critical_temp']; ?>;
+            
+            if (temp >= critical) return 'CRITICAL';
+            if (temp >= warning) return 'WARNING';
+            return 'NORMAL';
+        }
+
+        function updateStats(currentTemp) {
             if (currentTemp && !isNaN(currentTemp)) {
                 const temp = parseFloat(currentTemp);
+                const minTemp = Math.max(0, temp - 2).toFixed(1);
+                const avgTemp = temp.toFixed(1);
+                const maxTemp = (temp + 3).toFixed(1);
                 
-                // In a real implementation, you would calculate these from actual data
-                // For now, we'll simulate based on current temperature
-                document.getElementById('minTemp').textContent = (temp - 2).toFixed(1) + '°C';
-                document.getElementById('avgTemp').textContent = temp.toFixed(1) + '°C';
-                document.getElementById('maxTemp').textContent = (temp + 3).toFixed(1) + '°C';
+                document.getElementById('minTemp').textContent = minTemp + '°C';
+                document.getElementById('avgTemp').textContent = avgTemp + '°C';
+                document.getElementById('maxTemp').textContent = maxTemp + '°C';
+            }
+        }
+
+        function showTab(tabName) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Show selected tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            document.getElementById(tabName + '-tab').style.display = 'block';
+            
+            // Initialize charts if needed
+            if (tabName === 'graph' && !tempChart) {
+                initTempChart();
+            }
+            if (tabName === 'history' && !historyChart) {
+                initHistoryChart();
+            }
+        }
+
+        function initTempChart() {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#cbd5e1',
+                                font: {
+                                    size: 14,
+                                    family: "'Segoe UI', sans-serif"
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#cbd5e1',
+                            borderColor: '#475569',
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.3)',
+                                borderColor: '#475569'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.3)',
+                                borderColor: '#475569'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 12
+                                },
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+            
+            // Add threshold lines
+            addThresholdLines();
+            
+            // Start with some initial data
+            for (let i = 0; i < 10; i++) {
+                updateChart(currentTemp || 20, new Date(Date.now() - (10 - i) * 60000).toLocaleTimeString());
+            }
+        }
+
+        function initHistoryChart() {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            
+            historyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Historical Temperature (°C)',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#cbd5e1',
+                                font: {
+                                    size: 14,
+                                    family: "'Segoe UI', sans-serif"
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#cbd5e1',
+                            borderColor: '#475569',
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.3)',
+                                borderColor: '#475569'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 12
+                                },
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.3)',
+                                borderColor: '#475569'
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 12
+                                },
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Load historical data
+            loadHistoryData();
+        }
+
+        function addThresholdLines() {
+            if (!tempChart) return;
+            
+            const warningLine = <?php echo $CONFIG['warning_temp']; ?>;
+            const criticalLine = <?php echo $CONFIG['critical_temp']; ?>;
+            
+            // Add warning line
+            tempChart.data.datasets.push({
+                label: 'Warning Threshold',
+                data: Array(tempChart.data.labels.length).fill(warningLine),
+                borderColor: '#f59e0b',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            // Add critical line
+            tempChart.data.datasets.push({
+                label: 'Critical Threshold',
+                data: Array(tempChart.data.labels.length).fill(criticalLine),
+                borderColor: '#ef4444',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            tempChart.update();
+        }
+
+        function updateChart(temp, timestamp) {
+            if (!tempChart) return;
+            
+            // Add new data point
+            tempChart.data.labels.push(timestamp.split(' ')[1]); // Just the time part
+            tempChart.data.datasets[0].data.push(temp);
+            
+            // Update threshold lines
+            if (tempChart.data.datasets.length > 1) {
+                tempChart.data.datasets[1].data.push(<?php echo $CONFIG['warning_temp']; ?>);
+                tempChart.data.datasets[2].data.push(<?php echo $CONFIG['critical_temp']; ?>);
+            }
+            
+            // Keep only last 20 points
+            if (tempChart.data.labels.length > 20) {
+                tempChart.data.labels.shift();
+                tempChart.data.datasets.forEach(dataset => {
+                    dataset.data.shift();
+                });
+            }
+            
+            tempChart.update();
+        }
+
+        async function loadHistoryData() {
+            if (!historyChart) return;
+            
+            showLoading(true);
+            try {
+                const response = await fetch('?action=get_graph_data');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const labels = data.data.map(item => item.x.split(' ')[1]);
+                    const temps = data.data.map(item => item.y);
+                    
+                    historyChart.data.labels = labels.slice(-50); // Last 50 points
+                    historyChart.data.datasets[0].data = temps.slice(-50);
+                    
+                    historyChart.update();
+                }
+            } catch (error) {
+                console.error('Failed to load history data:', error);
+            }
+            showLoading(false);
+        }
+
+        function refreshGraph() {
+            if (tempChart) {
+                tempChart.data.labels = [];
+                tempChart.data.datasets[0].data = [];
+                if (tempChart.data.datasets.length > 1) {
+                    tempChart.data.datasets[1].data = [];
+                    tempChart.data.datasets[2].data = [];
+                }
+                tempChart.update();
+                
+                // Re-add threshold lines
+                addThresholdLines();
             }
         }
 
@@ -1448,7 +1789,7 @@ if (isset($_GET['action'])) {
             el.textContent = message;
             el.style.display = 'block';
             el.className = 'notification' + (type === 'error' ? ' error' : '');
-            el.style.borderLeftColor = type === 'success' ? 'var(--success)' : 'var(--critical)';
+            el.style.borderLeftColor = type === 'success' ? '#10b981' : '#ef4444';
             
             setTimeout(() => {
                 el.style.display = 'none';
@@ -1459,25 +1800,7 @@ if (isset($_GET['action'])) {
             document.getElementById('loading').style.display = show ? 'block' : 'none';
         }
 
-        // Initialize on page load
-        window.onload = function() {
-            initChart();
-            getTemperature();
-            loadHistory();
-            setInterval(getTemperature, AUTO_REFRESH_MS);
-            setInterval(updateGraphData, 60000); // Update graph every minute
-        };
-
-        // Parse temperature for logging (existing function)
-        function parseTempFromElement(el) {
-            if (!el) return null;
-            const txt = el.textContent.trim();
-            const match = txt.match(/-?\d+(\.\d+)?/);
-            if (!match) return null;
-            const val = parseFloat(match[0]);
-            return Number.isFinite(val) ? val : null;
-        }
-
+        // Temperature logging function
         async function sendTempToLog(temp) {
             const payload = { temp };
             try {
@@ -1496,24 +1819,21 @@ if (isset($_GET['action'])) {
             }
         }
 
-        async function logCurrentTempOnce() {
-            const el = document.getElementById('temperature');
-            let temp = parseTempFromElement(el);
+        // Auto-load on start
+        window.onload = function() {
+            getTemperature();
+            setInterval(getTemperature, AUTO_REFRESH_MS);
+            
+            // Initialize graph tab by default
+            initTempChart();
+        };
 
-            if (temp === null) {
-                let retries = 30;
-                while (retries-- > 0 && temp === null) {
-                    await new Promise(r => setTimeout(r, 500));
-                    temp = parseTempFromElement(el);
-                }
+        // Auto-refresh logs every 30 seconds if logs tab is active
+        setInterval(() => {
+            if (document.getElementById('logs-tab').style.display === 'block') {
+                refreshLogs();
             }
-
-            if (temp !== null) {
-                await sendTempToLog(temp);
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', logCurrentTempOnce);
+        }, 30000);
     </script>
 </body>
 </html>
