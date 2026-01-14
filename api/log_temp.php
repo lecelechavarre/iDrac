@@ -1,8 +1,7 @@
-
 <?php
-// api/log_temp.php (placed at: C:\wamp64\www\idrac\api\log_temp.php)
+// api/log_temp.php
 header('Content-Type: application/json');
-date_default_timezone_set('Asia/Manila'); // adjust as needed
+date_default_timezone_set('Asia/Manila');
 
 // Read JSON body
 $raw = file_get_contents('php://input');
@@ -22,25 +21,28 @@ if (!is_numeric($temp)) {
 }
 
 // Prepare paths
-$baseDir = dirname(__DIR__);           // C:\wamp64\www\idrac
-$storageDir = $baseDir . '/storage';   // C:\wamp64\www\idrac\storage
+$baseDir = dirname(__DIR__);
+$storageDir = $baseDir . '/storage';
 if (!is_dir($storageDir)) {
-    // Create storage directory if missing
     mkdir($storageDir, 0775, true);
 }
 
 $logFile = $storageDir . '/temperature.log';
 
-// Build log line
+// Get IP address
+$ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+// Build log line with IP
 $line = sprintf(
-    "[%s] temp=%.2f°C, ip=%s%s",
+    "%s,%.1f,%s,%s%s",
     date('Y-m-d H:i:s'),
     (float)$temp,
-    $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+    get_temp_status_log((float)$temp),
+    $ip,
     PHP_EOL
 );
 
-// Append with locking to avoid concurrency issues
+// Append with locking
 $ok = false;
 $fp = fopen($logFile, 'ab');
 if ($fp) {
@@ -57,5 +59,15 @@ if ($fp) {
     exit;
 }
 
+// Determine status for logging
+function get_temp_status_log($temp) {
+    $warning_temp = 25;
+    $critical_temp = 30;
+    
+    if ($temp >= $critical_temp) return 'CRITICAL';
+    if ($temp >= $warning_temp) return 'WARNING';
+    return 'NORMAL';
+}
+
 // Respond with success
-echo json_encode(['ok' => $ok, 'timestamp' => date('c')]);
+echo json_encode(['ok' => $ok, 'timestamp' => date('c'), 'ip' => $ip]);
