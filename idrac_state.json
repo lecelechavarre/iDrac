@@ -1,0 +1,8 @@
+{
+    "last_status": "NORMAL",
+    "last_alert_status": "WARNING",
+    "last_alert_time": "2026-01-09 14:58:14",
+    "warning_start_time": null,
+    "critical_start_time": null,
+    "last_hourly_email": 13
+}
