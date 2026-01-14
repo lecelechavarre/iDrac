@@ -1,5 +1,5 @@
 <?php
-// api/log_temp.php
+// api/log_temp.php - Enhanced logging with IP tracking
 header('Content-Type: application/json');
 date_default_timezone_set('Asia/Manila');
 
@@ -29,20 +29,23 @@ if (!is_dir($storageDir)) {
 
 $logFile = $storageDir . '/temperature.log';
 
-// Get IP address
-$ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+// Get client IP with better detection
+$ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 
+      $_SERVER['HTTP_CLIENT_IP'] ?? 
+      $_SERVER['REMOTE_ADDR'] ?? 
+      'unknown';
 
-// Build log line with IP
+// Build enhanced log line
 $line = sprintf(
-    "%s,%.1f,%s,%s%s",
+    "[%s] temp=%.2f°C, ip=%s, agent=%s%s",
     date('Y-m-d H:i:s'),
     (float)$temp,
-    get_temp_status_log((float)$temp),
     $ip,
+    substr($_SERVER['HTTP_USER_AGENT'] ?? 'unknown', 0, 50),
     PHP_EOL
 );
 
-// Append with locking
+// Append with locking to avoid concurrency issues
 $ok = false;
 $fp = fopen($logFile, 'ab');
 if ($fp) {
@@ -59,15 +62,31 @@ if ($fp) {
     exit;
 }
 
-// Determine status for logging
-function get_temp_status_log($temp) {
-    $warning_temp = 25;
-    $critical_temp = 30;
-    
-    if ($temp >= $critical_temp) return 'CRITICAL';
-    if ($temp >= $warning_temp) return 'WARNING';
+// Also log to main application log
+$mainLog = $baseDir . '/idrac_log.csv';
+$csvLine = sprintf('%s,%.1f,%s%s', 
+    date('Y-m-d H:i:s'), 
+    (float)$temp, 
+    get_temp_status((float)$temp),
+    PHP_EOL
+);
+@file_put_contents($mainLog, $csvLine, FILE_APPEND | LOCK_EX);
+
+function get_temp_status($temp): string {
+    // Load config to get thresholds
+    $configFile = dirname(__DIR__) . '/idrac_config.php';
+    if (file_exists($configFile)) {
+        include $configFile;
+        if ($temp >= $CONFIG['critical_temp']) return 'CRITICAL';
+        if ($temp >= $CONFIG['warning_temp'])  return 'WARNING';
+    }
     return 'NORMAL';
 }
 
 // Respond with success
-echo json_encode(['ok' => $ok, 'timestamp' => date('c'), 'ip' => $ip]);
+echo json_encode([
+    'ok' => $ok, 
+    'timestamp' => date('c'),
+    'logged_temp' => (float)$temp,
+    'source_ip' => $ip
+]);
