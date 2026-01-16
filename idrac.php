@@ -43,7 +43,7 @@ function log_temperature(float $temp, string $status): void {
 function get_logs(): array {
     $logs = [];
     if (file_exists(LOG_FILE)) {
-        $lines = file(LOG_FILE, FILE_IGNORE_NEWLINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             $parts = explode(',', $line);
             if (count($parts) === 3) {
@@ -61,7 +61,7 @@ function get_logs(): array {
 function get_storage_logs(): array {
     $logs = [];
     if (file_exists(STORAGE_LOG_FILE)) {
-        $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEWLINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             if (preg_match('/\[([^\]]+)\]\s*temp=([\d\.]+).*?ip=([\d\.]+)/', $line, $matches)) {
                 $logs[] = [
@@ -882,7 +882,7 @@ if (isset($_GET['action'])) {
         
         /* =============== BUTTONS - WITH BORDER ONLY =============== */
         .btn {
-            padding: 8px 16px;
+            padding: 10px 16px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
@@ -892,6 +892,16 @@ if (isset($_GET['action'])) {
             background: var(--accent);
             color: white;
             white-space: nowrap;
+            text-align: center;
+            min-width: 120px;
+        }
+        
+        @media (max-width: 480px) {
+            .btn {
+                padding: 8px 12px;
+                font-size: 11px;
+                min-width: 100px;
+            }
         }
         
         .btn:hover {
@@ -1051,6 +1061,7 @@ if (isset($_GET['action'])) {
         .logs-container {
             max-height: 350px;
             overflow-y: auto;
+            margin-bottom: 15px;
         }
         
         .logs-table {
@@ -1108,39 +1119,34 @@ if (isset($_GET['action'])) {
         /* =============== MODAL ACTIONS - FIXED VISIBILITY =============== */
         .modal-actions {
             display: flex;
-            gap: 8px;
+            gap: 10px;
             margin-top: 15px;
             flex-wrap: wrap;
-            align-items: center;
             justify-content: flex-start;
-            width: 100%;
         }
         
+        /* Ensure buttons are fully visible in modal */
         .modal-actions .btn {
-            flex: 1 1 auto;
-            min-width: 120px;
-            text-align: center;
-            font-size: 11px;
-            padding: 10px 12px;
+            flex: 1;
+            min-width: 140px;
+            max-width: 200px;
             white-space: normal;
             word-break: break-word;
-            line-height: 1.2;
+            padding: 10px 12px;
+            font-size: 11px;
         }
         
-        @media (min-width: 480px) {
+        @media (max-width: 480px) {
+            .modal-actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
             .modal-actions .btn {
                 flex: none;
-                min-width: 140px;
-                font-size: 12px;
-                padding: 10px 16px;
-                white-space: nowrap;
-            }
-        }
-        
-        @media (min-width: 768px) {
-            .modal-actions .btn {
-                min-width: 160px;
-                font-size: 13px;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
             }
         }
         
@@ -1257,14 +1263,8 @@ if (isset($_GET['action'])) {
                 max-height: 85vh;
             }
             
-            .modal-actions {
-                justify-content: center;
-            }
-            
-            .modal-actions .btn {
-                min-width: 100px;
-                font-size: 10px;
-                padding: 8px 10px;
+            .modal-content {
+                padding: 0 15px 15px;
             }
         }
         
@@ -1287,9 +1287,8 @@ if (isset($_GET['action'])) {
             }
             
             .modal-actions .btn {
-                min-width: 90px;
-                font-size: 9px;
-                padding: 6px 8px;
+                padding: 12px;
+                font-size: 12px;
             }
         }
         
@@ -1559,14 +1558,14 @@ if (isset($_GET['action'])) {
                             borderWidth: 1,
                             cornerRadius: 8,
                             padding: 12,
-                            // SIMPLIFIED TOOLTIP - ONLY SHOW TEMPERATURE IN WHOLE NUMBER
+                            // SIMPLIFIED TOOLTIP - ONLY TEMPERATURE
                             callbacks: {
                                 label: function(context) {
                                     const value = context.parsed.y;
-                                    // Round to whole number and show only temperature
-                                    return `${Math.round(value)}°C`;
+                                    // Only show temperature as whole number
+                                    return `Temperature: ${Math.round(value)}°C`;
                                 },
-                                // REMOVED afterLabel callback completely to remove status/warning text
+                                // REMOVED afterLabel callback completely
                                 afterLabel: null
                             }
                         }
@@ -1926,7 +1925,7 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // ENHANCED History Graph Functions - VISIBLE LINE CHART FOR EACH STATUS
+        // ENHANCED History Graph Functions - VISIBLE LINE CHART FOR ALL STATUSES
         function initEnhancedHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
@@ -1936,12 +1935,12 @@ if (isset($_GET['action'])) {
                     labels: [],
                     datasets: [
                         {
-                            label: 'Normal',
+                            label: 'Normal Temperature',
                             data: [],
                             borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             borderWidth: 3,
-                            fill: true,
+                            fill: false,
                             tension: 0.3,
                             pointBackgroundColor: '#10b981',
                             pointBorderColor: '#ffffff',
@@ -1950,12 +1949,12 @@ if (isset($_GET['action'])) {
                             pointHoverRadius: 6
                         },
                         {
-                            label: 'Warning',
+                            label: 'Warning Temperature',
                             data: [],
                             borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
                             borderWidth: 3,
-                            fill: true,
+                            fill: false,
                             tension: 0.3,
                             pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#ffffff',
@@ -1964,12 +1963,12 @@ if (isset($_GET['action'])) {
                             pointHoverRadius: 6
                         },
                         {
-                            label: 'Critical',
+                            label: 'Critical Temperature',
                             data: [],
                             borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
                             borderWidth: 3,
-                            fill: true,
+                            fill: false,
                             tension: 0.3,
                             pointBackgroundColor: '#ef4444',
                             pointBorderColor: '#ffffff',
@@ -1991,9 +1990,11 @@ if (isset($_GET['action'])) {
                                     size: 12,
                                     weight: '600'
                                 },
-                                padding: 20,
+                                padding: 15,
                                 usePointStyle: true,
-                                pointStyle: 'circle'
+                                pointStyle: 'circle',
+                                boxWidth: 8,
+                                boxHeight: 8
                             }
                         },
                         tooltip: {
@@ -2007,8 +2008,8 @@ if (isset($_GET['action'])) {
                             callbacks: {
                                 label: function(context) {
                                     const value = context.parsed.y;
-                                    // Round to whole number
-                                    return `${Math.round(value)}°C`;
+                                    const datasetLabel = context.dataset.label || '';
+                                    return `${datasetLabel}: ${Math.round(value)}°C`;
                                 }
                             }
                         }
@@ -2049,6 +2050,11 @@ if (isset($_GET['action'])) {
                     interaction: {
                         intersect: false,
                         mode: 'index'
+                    },
+                    elements: {
+                        line: {
+                            tension: 0.3
+                        }
                     }
                 }
             });
@@ -2072,64 +2078,73 @@ if (isset($_GET['action'])) {
                     // Sort data by timestamp
                     data.data.sort((a, b) => new Date(a.x) - new Date(b.x));
                     
-                    // Create labels with better formatting
-                    const labels = [];
+                    // Create separate arrays for each status
                     const normalData = [];
                     const warningData = [];
                     const criticalData = [];
+                    const labels = [];
                     
-                    // Process data in batches for better performance
-                    const maxPoints = window.innerWidth < 768 ? 60 : 120;
-                    const step = Math.ceil(data.data.length / maxPoints);
+                    // Group data by hour for better visualization
+                    const dataByHour = {};
                     
-                    for (let i = 0; i < data.data.length; i += step) {
-                        const item = data.data[i];
+                    data.data.forEach(item => {
                         const date = new Date(item.x);
+                        const hourKey = date.toISOString().slice(0, 13); // YYYY-MM-DDTHH
                         
-                        // Format label: "Jan 12 14:30"
-                        const label = date.toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric' 
-                        }) + ' ' + date.toLocaleTimeString('en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit',
-                            hour12: false 
-                        });
+                        if (!dataByHour[hourKey]) {
+                            dataByHour[hourKey] = {
+                                normal: [],
+                                warning: [],
+                                critical: [],
+                                timestamp: date
+                            };
+                        }
                         
+                        if (item.status === 'CRITICAL') {
+                            dataByHour[hourKey].critical.push(item.y);
+                        } else if (item.status === 'WARNING') {
+                            dataByHour[hourKey].warning.push(item.y);
+                        } else {
+                            dataByHour[hourKey].normal.push(item.y);
+                        }
+                    });
+                    
+                    // Process hourly data
+                    Object.keys(dataByHour).sort().forEach(hourKey => {
+                        const hourData = dataByHour[hourKey];
+                        const date = hourData.timestamp;
+                        
+                        // Create label
+                        const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
+                                     date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                         labels.push(label);
                         
-                        // Add data to appropriate dataset
-                        if (item.status === 'CRITICAL') {
-                            criticalData.push(item.y);
-                            warningData.push(null);
-                            normalData.push(null);
-                        } else if (item.status === 'WARNING') {
-                            criticalData.push(null);
-                            warningData.push(item.y);
-                            normalData.push(null);
-                        } else {
-                            criticalData.push(null);
-                            warningData.push(null);
-                            normalData.push(item.y);
-                        }
-                    }
+                        // Calculate average for each status in this hour
+                        const avgNormal = hourData.normal.length > 0 ? 
+                            hourData.normal.reduce((a, b) => a + b, 0) / hourData.normal.length : null;
+                        const avgWarning = hourData.warning.length > 0 ? 
+                            hourData.warning.reduce((a, b) => a + b, 0) / hourData.warning.length : null;
+                        const avgCritical = hourData.critical.length > 0 ? 
+                            hourData.critical.reduce((a, b) => a + b, 0) / hourData.critical.length : null;
+                        
+                        normalData.push(avgNormal);
+                        warningData.push(avgWarning);
+                        criticalData.push(avgCritical);
+                    });
                     
                     if (historyChart) {
-                        // Update chart with new data
                         historyChart.data.labels = labels;
                         historyChart.data.datasets[0].data = normalData;
                         historyChart.data.datasets[1].data = warningData;
                         historyChart.data.datasets[2].data = criticalData;
-                        
-                        // Calculate stats for notification
-                        const normalCount = normalData.filter(val => val !== null).length;
-                        const warningCount = warningData.filter(val => val !== null).length;
-                        const criticalCount = criticalData.filter(val => val !== null).length;
-                        
                         historyChart.update();
-                        
-                        showNotification(`Graph loaded: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical points`, 'success');
                     }
+                    
+                    // Show statistics
+                    const normalCount = data.data.filter(item => item.status === 'NORMAL').length;
+                    const warningCount = data.data.filter(item => item.status === 'WARNING').length;
+                    const criticalCount = data.data.filter(item => item.status === 'CRITICAL').length;
+                    showNotification(`Showing ${labels.length} time points: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical`, 'success');
                 } else {
                     if (historyChart) {
                         historyChart.data.labels = [];
@@ -2147,13 +2162,15 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // Download Functions
+        // Download Functions - ENHANCED FOR MODAL VISIBILITY
         function downloadCSV() {
             window.open('?action=download_logs&type=csv', '_blank');
+            showNotification('Downloading CSV file...', 'success');
         }
 
         function downloadLogFile() {
             window.open('?action=download_logs&type=storage', '_blank');
+            showNotification('Downloading log file...', 'success');
         }
 
         function downloadFilteredCSV() {
@@ -2165,9 +2182,10 @@ if (isset($_GET['action'])) {
                 return;
             }
             
-            showNotification('Downloading CSV data', 'success');
+            showNotification('Downloading filtered CSV data...', 'success');
+            // Trigger download after a short delay to show notification
             setTimeout(() => {
-                downloadCSV();
+                window.open(`?action=download_logs&type=csv`, '_blank');
             }, 500);
         }
 
@@ -2180,9 +2198,10 @@ if (isset($_GET['action'])) {
                 return;
             }
             
-            showNotification('Downloading log file', 'success');
+            showNotification('Downloading filtered log file...', 'success');
+            // Trigger download after a short delay to show notification
             setTimeout(() => {
-                downloadLogFile();
+                window.open(`?action=download_logs&type=storage`, '_blank');
             }, 500);
         }
 
@@ -2236,6 +2255,23 @@ if (isset($_GET['action'])) {
             if (historyChart) {
                 historyChart.resize();
             }
+            
+            // Ensure modal buttons are properly sized
+            const modalActions = document.querySelectorAll('.modal-actions');
+            modalActions.forEach(actions => {
+                const buttons = actions.querySelectorAll('.btn');
+                if (window.innerWidth <= 480) {
+                    buttons.forEach(btn => {
+                        btn.style.width = '100%';
+                        btn.style.marginBottom = '5px';
+                    });
+                } else {
+                    buttons.forEach(btn => {
+                        btn.style.width = '';
+                        btn.style.marginBottom = '';
+                    });
+                }
+            });
         }
 
         // Initialize
@@ -2277,6 +2313,9 @@ if (isset($_GET['action'])) {
             window.addEventListener('orientationchange', function() {
                 setTimeout(handleResize, 100);
             });
+            
+            // Initial resize handling
+            handleResize();
         };
         
         // Cleanup on page unload
