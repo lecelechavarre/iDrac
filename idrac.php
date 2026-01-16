@@ -1,5 +1,5 @@
 <?php
-// iDRAC Temperature Monitor - Consolidated Modal UI Version
+// iDRAC Temperature Monitor - Responsive No-Border Version
 // Include configuration
 require_once __DIR__ . '/idrac_config.php';
 
@@ -597,66 +597,66 @@ if (isset($_GET['action'])) {
         }
         
         .container {
-            max-width: 1600px;
+            max-width: 100%;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
         }
         
-        /* Header */
+        /* Header - NO BORDER */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 20px;
+            padding: 15px;
             background: var(--bg-secondary);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
         }
         
         .logo {
-            width: 50px;
-            height: 50px;
+            width: 45px;
+            height: 45px;
             background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-            border-radius: 12px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 20px;
+            font-size: 18px;
             color: white;
         }
         
         .header h1 {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 700;
             color: var(--text-primary);
         }
         
         .header-subtitle {
-            font-size: 13px;
+            font-size: 11px;
             color: var(--text-muted);
-            margin-top: 3px;
+            margin-top: 2px;
         }
         
         .refresh-indicator {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 13px;
+            gap: 8px;
+            font-size: 12px;
             color: var(--text-muted);
-            padding: 8px 16px;
+            padding: 6px 12px;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
+            border-radius: 6px;
         }
         
         .refresh-dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--success);
             animation: pulse 2s infinite;
@@ -667,26 +667,31 @@ if (isset($_GET['action'])) {
             50% { opacity: 0.7; }
         }
         
-        /* Dashboard Layout */
+        /* Dashboard Layout - RESPONSIVE */
         .dashboard {
             display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 20px;
-            height: 500px;
+            grid-template-columns: 1fr;
+            gap: 15px;
         }
         
-        @media (max-width: 1200px) {
+        @media (min-width: 768px) {
             .dashboard {
-                grid-template-columns: 1fr;
-                height: auto;
+                grid-template-columns: 1fr 2fr;
+                min-height: 450px;
             }
         }
         
-        /* Temperature Panel */
+        @media (min-width: 1200px) {
+            .dashboard {
+                min-height: 500px;
+            }
+        }
+        
+        /* Temperature Panel - NO BORDER */
         .temp-panel {
             background: var(--bg-card);
-            border-radius: 20px;
-            padding: 30px;
+            border-radius: 15px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -694,19 +699,32 @@ if (isset($_GET['action'])) {
         }
         
         .temp-label {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
             font-weight: 600;
         }
         
         .temp-display {
-            font-size: 80px;
+            font-size: 60px;
             font-weight: 800;
-            margin: 15px 0;
+            margin: 10px 0;
             line-height: 1;
+            text-align: center;
+        }
+        
+        @media (min-width: 768px) {
+            .temp-display {
+                font-size: 70px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .temp-display {
+                font-size: 80px;
+            }
         }
         
         .temp-normal { color: var(--success); }
@@ -716,13 +734,14 @@ if (isset($_GET['action'])) {
         
         .status {
             display: inline-block;
-            padding: 10px 25px;
-            border-radius: 25px;
+            padding: 8px 20px;
+            border-radius: 20px;
             font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.5px;
+            font-size: 12px;
+            letter-spacing: 0.3px;
             text-transform: uppercase;
-            margin: 10px 0;
+            margin: 8px 0;
+            text-align: center;
         }
         
         .normal { background: var(--success); color: white; }
@@ -732,8 +751,8 @@ if (isset($_GET['action'])) {
         
         .meta {
             color: var(--text-muted);
-            font-size: 13px;
-            margin-top: 10px;
+            font-size: 12px;
+            margin-top: 8px;
             text-align: center;
         }
         
@@ -741,51 +760,66 @@ if (isset($_GET['action'])) {
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-top: 30px;
+            gap: 10px;
+            margin-top: 20px;
             width: 100%;
         }
         
         .stat-card {
             background: var(--bg-secondary);
-            padding: 20px;
-            border-radius: 12px;
+            padding: 15px;
+            border-radius: 10px;
             text-align: center;
         }
         
         .stat-value {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 5px;
+            margin-bottom: 4px;
+        }
+        
+        @media (min-width: 768px) {
+            .stat-value {
+                font-size: 20px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .stat-value {
+                font-size: 24px;
+            }
         }
         
         .stat-label {
             color: var(--text-muted);
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             font-weight: 600;
         }
         
-        /* Graph Panel */
+        /* Graph Panel - NO BORDER */
         .graph-panel {
             background: var(--bg-card);
-            border-radius: 20px;
-            padding: 25px;
+            border-radius: 15px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
+            min-height: 400px;
         }
         
         .graph-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .graph-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-primary);
         }
@@ -793,19 +827,21 @@ if (isset($_GET['action'])) {
         .graph-container {
             flex: 1;
             position: relative;
+            min-height: 300px;
         }
         
         /* BUTTONS ONLY - WITH BORDER */
         .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
             border: 2px solid transparent;
             background: var(--accent);
             color: white;
+            white-space: nowrap;
         }
         
         .btn:hover {
@@ -827,32 +863,38 @@ if (isset($_GET['action'])) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.9);
             z-index: 1000;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 10px;
         }
         
         .modal {
             background: var(--bg-card);
-            border-radius: 20px;
-            width: 95%;
-            max-width: 1400px;
-            max-height: 90vh;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 1200px;
+            max-height: 95vh;
             display: flex;
             flex-direction: column;
         }
         
+        @media (min-width: 768px) {
+            .modal {
+                max-height: 90vh;
+            }
+        }
+        
         .modal-header {
-            padding: 20px 25px;
+            padding: 15px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
         .modal-title {
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 600;
             color: var(--text-primary);
         }
@@ -861,15 +903,15 @@ if (isset($_GET['action'])) {
             background: none;
             border: none;
             color: var(--text-muted);
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
             padding: 5px;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 6px;
+            border-radius: 5px;
         }
         
         .modal-close:hover {
@@ -880,19 +922,29 @@ if (isset($_GET['action'])) {
         /* Modal Tabs */
         .modal-tabs {
             display: flex;
-            gap: 10px;
-            padding: 0 25px 15px;
+            gap: 8px;
+            padding: 0 20px 10px;
+            flex-wrap: wrap;
         }
         
         .modal-tab {
-            padding: 10px 20px;
+            padding: 8px 16px;
             background: var(--bg-secondary);
-            border-radius: 8px;
+            border-radius: 6px;
             color: var(--text-secondary);
             cursor: pointer;
             transition: all 0.2s ease;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 80px;
+        }
+        
+        @media (min-width: 480px) {
+            .modal-tab {
+                flex: none;
+            }
         }
         
         .modal-tab.active {
@@ -903,61 +955,92 @@ if (isset($_GET['action'])) {
         .modal-content {
             flex: 1;
             overflow-y: auto;
-            padding: 0 25px 25px;
+            padding: 0 20px 20px;
         }
         
         /* Date Filter */
         .date-filter {
             display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            align-items: center;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
         }
         
-        .date-input {
-            padding: 8px 12px;
-            background: var(--bg-secondary);
-            border: none;
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 14px;
+        @media (min-width: 480px) {
+            .date-filter {
+                flex-direction: row;
+                align-items: flex-end;
+            }
+        }
+        
+        .date-group {
+            flex: 1;
         }
         
         .date-label {
             color: var(--text-muted);
-            font-size: 13px;
-            margin-bottom: 5px;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        
+        .date-input {
+            padding: 6px 10px;
+            background: var(--bg-secondary);
+            border: none;
+            border-radius: 5px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 12px;
+            width: 100%;
         }
         
         /* Logs Table */
         .logs-container {
-            max-height: 400px;
+            max-height: 350px;
             overflow-y: auto;
         }
         
         .logs-table {
             width: 100%;
             border-collapse: collapse;
+            font-size: 11px;
+        }
+        
+        @media (min-width: 768px) {
+            .logs-table {
+                font-size: 12px;
+            }
         }
         
         .logs-table th {
             position: sticky;
             top: 0;
             background: var(--bg-secondary);
-            padding: 14px;
+            padding: 10px 8px;
             text-align: left;
             color: var(--text-muted);
             font-weight: 600;
-            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
+            font-size: 10px;
+        }
+        
+        @media (min-width: 768px) {
+            .logs-table th {
+                padding: 12px 10px;
+                font-size: 11px;
+            }
         }
         
         .logs-table td {
-            padding: 14px;
+            padding: 10px 8px;
             color: var(--text-secondary);
-            font-size: 13px;
+        }
+        
+        @media (min-width: 768px) {
+            .logs-table td {
+                padding: 12px 10px;
+            }
         }
         
         .logs-table tr:nth-child(even) {
@@ -971,22 +1054,31 @@ if (isset($_GET['action'])) {
         /* Modal Actions */
         .modal-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
+            gap: 8px;
+            margin-top: 15px;
+            flex-wrap: wrap;
         }
         
         /* Notification */
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 25px;
-            border-radius: 12px;
+            top: 15px;
+            right: 15px;
+            padding: 12px 20px;
+            border-radius: 10px;
             background: var(--bg-card);
             display: none;
             z-index: 1001;
             animation: slideInRight 0.3s ease;
             border-left: 4px solid var(--success);
+            max-width: 90%;
+            font-size: 13px;
+        }
+        
+        @media (min-width: 768px) {
+            .notification {
+                max-width: 350px;
+            }
         }
         
         .notification.error {
@@ -1007,18 +1099,18 @@ if (isset($_GET['action'])) {
             transform: translate(-50%, -50%);
             z-index: 1000;
             background: var(--bg-primary);
-            padding: 30px;
-            border-radius: 15px;
+            padding: 20px;
+            border-radius: 12px;
         }
         
         .spinner {
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             border: 3px solid var(--bg-secondary);
             border-top: 3px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            margin: 0 auto 10px;
         }
         
         @keyframes spin {
@@ -1028,23 +1120,23 @@ if (isset($_GET['action'])) {
         
         .loading-text {
             color: var(--text-primary);
-            font-size: 14px;
+            font-size: 13px;
             text-align: center;
         }
         
         /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: 5px;
         }
         
         ::-webkit-scrollbar-track {
             background: var(--bg-secondary);
-            border-radius: 3px;
+            border-radius: 2px;
         }
         
         ::-webkit-scrollbar-thumb {
             background: var(--bg-primary);
-            border-radius: 3px;
+            border-radius: 2px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
@@ -1054,7 +1146,7 @@ if (isset($_GET['action'])) {
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- Header - NO BORDER -->
         <div class="header">
             <div class="logo-container">
                 <div class="logo">iTM</div>
@@ -1070,9 +1162,9 @@ if (isset($_GET['action'])) {
             </div>
         </div>
 
-        <!-- Main Dashboard -->
+        <!-- Main Dashboard - RESPONSIVE -->
         <div class="dashboard">
-            <!-- Temperature Panel -->
+            <!-- Temperature Panel - NO BORDER -->
             <div class="temp-panel">
                 <div class="temp-label">Current Temperature</div>
                 <div class="temp-display" id="temperature">-- °C</div>
@@ -1093,21 +1185,15 @@ if (isset($_GET['action'])) {
                         <div class="stat-label">Max Today</div>
                     </div>
                 </div>
-                
-                <button class="btn btn-primary" onclick="openLogsModal()" style="margin-top: 25px;">
-                    View Logs
-                </button>
             </div>
 
-            <!-- Live Graph Panel -->
+            <!-- Live Graph Panel - NO BORDER -->
             <div class="graph-panel">
                 <div class="graph-header">
                     <div class="graph-title">Live Temperature Graph</div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-info" onclick="openLogsModal()">
-                            View Logs
-                        </button>
-                    </div>
+                    <button class="btn btn-info" onclick="openLogsModal()">
+                        View Logs
+                    </button>
                 </div>
                 <div class="graph-container">
                     <canvas id="liveChart"></canvas>
@@ -1144,7 +1230,7 @@ if (isset($_GET['action'])) {
                                 </tr>
                             </thead>
                             <tbody id="liveLogsBody">
-                                <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading live logs...</td></tr>
+                                <tr><td colspan="4" style="text-align: center; padding: 30px;">Loading live logs...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1164,11 +1250,11 @@ if (isset($_GET['action'])) {
                 <!-- History Logs Tab -->
                 <div id="history-tab" class="tab-content" style="display: none;">
                     <div class="date-filter">
-                        <div>
+                        <div class="date-group">
                             <div class="date-label">Start Date</div>
                             <input type="date" id="historyStartDate" class="date-input" value="<?php echo date('Y-m-d', strtotime('-7 days')); ?>">
                         </div>
-                        <div>
+                        <div class="date-group">
                             <div class="date-label">End Date</div>
                             <input type="date" id="historyEndDate" class="date-input" value="<?php echo date('Y-m-d'); ?>">
                         </div>
@@ -1187,7 +1273,7 @@ if (isset($_GET['action'])) {
                                 </tr>
                             </thead>
                             <tbody id="historyLogsBody">
-                                <tr><td colspan="4" style="text-align: center; padding: 40px;">Select date range and click Search</td></tr>
+                                <tr><td colspan="4" style="text-align: center; padding: 30px;">Select date range and click Search</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1204,11 +1290,11 @@ if (isset($_GET['action'])) {
                 <!-- History Graph Tab -->
                 <div id="graph-tab" class="tab-content" style="display: none;">
                     <div class="date-filter">
-                        <div>
+                        <div class="date-group">
                             <div class="date-label">Start Date</div>
                             <input type="date" id="graphStartDate" class="date-input" value="<?php echo date('Y-m-d', strtotime('-7 days')); ?>">
                         </div>
-                        <div>
+                        <div class="date-group">
                             <div class="date-label">End Date</div>
                             <input type="date" id="graphEndDate" class="date-input" value="<?php echo date('Y-m-d'); ?>">
                         </div>
@@ -1216,7 +1302,7 @@ if (isset($_GET['action'])) {
                             Show Graph
                         </button>
                     </div>
-                    <div class="graph-container" style="height: 400px; margin-top: 20px;">
+                    <div class="graph-container" style="height: 300px; margin-top: 15px;">
                         <canvas id="historyChart"></canvas>
                     </div>
                 </div>
@@ -1247,6 +1333,7 @@ if (isset($_GET['action'])) {
             data: []
         };
         let liveLogsInterval = null;
+        let temperatureUpdateInterval = null;
 
         // Initialize Live Chart
         function initLiveChart() {
@@ -1263,7 +1350,7 @@ if (isset($_GET['action'])) {
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         borderWidth: 2,
                         fill: true,
-                        tension: 0.4,
+                        tension: 0.3,
                         pointBackgroundColor: function(context) {
                             const value = context.dataset.data[context.dataIndex];
                             if (value >= CRITICAL_TEMP) return '#ef4444';
@@ -1272,8 +1359,8 @@ if (isset($_GET['action'])) {
                         },
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 1,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        pointRadius: 3,
+                        pointHoverRadius: 5
                     }]
                 },
                 options: {
@@ -1289,42 +1376,49 @@ if (isset($_GET['action'])) {
                             bodyColor: '#cbd5e1',
                             borderColor: '#475569',
                             borderWidth: 1,
-                            cornerRadius: 6
+                            cornerRadius: 6,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Temperature: ${context.parsed.y}°C`;
+                                }
+                            }
                         }
                     },
                     scales: {
                         x: {
                             grid: {
                                 color: 'rgba(71, 85, 105, 0.2)',
+                                drawBorder: false
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 10
                                 },
-                                maxTicksLimit: 10
+                                maxTicksLimit: 8
                             }
                         },
                         y: {
                             beginAtZero: true,
                             grid: {
                                 color: 'rgba(71, 85, 105, 0.2)',
+                                drawBorder: false
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 10
                                 },
                                 callback: function(value) {
                                     return value + '°C';
-                                }
-                            },
-                            suggestedMin: 0,
-                            suggestedMax: 40
+                                },
+                                suggestedMin: 0,
+                                suggestedMax: 40
+                            }
                         }
                     },
                     animation: {
-                        duration: 500,
+                        duration: 300,
                         easing: 'linear'
                     }
                 }
@@ -1344,7 +1438,7 @@ if (isset($_GET['action'])) {
                 borderColor: '#f59e0b',
                 backgroundColor: 'transparent',
                 borderWidth: 1,
-                borderDash: [5, 3],
+                borderDash: [4, 3],
                 fill: false,
                 pointRadius: 0
             });
@@ -1356,12 +1450,12 @@ if (isset($_GET['action'])) {
                 borderColor: '#ef4444',
                 backgroundColor: 'transparent',
                 borderWidth: 1,
-                borderDash: [5, 3],
+                borderDash: [4, 3],
                 fill: false,
                 pointRadius: 0
             });
             
-            liveChart.update();
+            liveChart.update('none');
         }
 
         // Update Live Chart with new temperature
@@ -1380,8 +1474,9 @@ if (isset($_GET['action'])) {
                 liveChart.data.datasets[2].data.push(CRITICAL_TEMP);
             }
             
-            // Keep only last 30 points
-            if (chartData.labels.length > 30) {
+            // Keep only last 20 points for mobile, 30 for desktop
+            const maxPoints = window.innerWidth < 768 ? 15 : 25;
+            if (chartData.labels.length > maxPoints) {
                 chartData.labels.shift();
                 chartData.data.shift();
                 if (liveChart.data.datasets.length > 1) {
@@ -1391,8 +1486,8 @@ if (isset($_GET['action'])) {
             }
             
             // Update chart
-            liveChart.data.labels = chartData.labels;
-            liveChart.data.datasets[0].data = chartData.data;
+            liveChart.data.labels = [...chartData.labels];
+            liveChart.data.datasets[0].data = [...chartData.data];
             
             // Update point colors
             liveChart.data.datasets[0].pointBackgroundColor = chartData.data.map(value => {
@@ -1503,33 +1598,31 @@ if (isset($_GET['action'])) {
 
         // Logs Functions
         async function refreshLiveLogs() {
-            showLoading(true);
             try {
                 const response = await fetch('?action=get_storage_logs');
                 const data = await response.json();
                 
                 if (data.success && data.logs.length > 0) {
                     const tbody = document.getElementById('liveLogsBody');
-                    tbody.innerHTML = data.logs.slice().reverse().slice(0, 50).map(log => `
+                    tbody.innerHTML = data.logs.slice().reverse().slice(0, 30).map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
                             <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
-                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 4px 10px; font-size: 11px;">
+                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
                                 </span>
                             </td>
-                            <td><code style="font-size: 11px;">${log.ip}</code></td>
+                            <td><code style="font-size: 10px;">${log.ip}</code></td>
                         </tr>
                     `).join('');
                 } else {
                     document.getElementById('liveLogsBody').innerHTML = 
-                        '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs available</td></tr>';
+                        '<tr><td colspan="4" style="text-align: center; padding: 30px;">No logs available</td></tr>';
                 }
             } catch (error) {
                 console.error('Error loading live logs:', error);
             }
-            showLoading(false);
         }
 
         function startLiveLogsRefresh() {
@@ -1565,17 +1658,17 @@ if (isset($_GET['action'])) {
                             <td>${log.timestamp}</td>
                             <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
-                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 4px 10px; font-size: 11px;">
+                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
                                 </span>
                             </td>
-                            <td><code style="font-size: 11px;">${log.ip}</code></td>
+                            <td><code style="font-size: 10px;">${log.ip}</code></td>
                         </tr>
                     `).join('');
                     showNotification(`Found ${data.logs.length} logs for selected date range`, 'success');
                 } else {
                     document.getElementById('historyLogsBody').innerHTML = 
-                        '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs found for selected date range</td></tr>';
+                        '<tr><td colspan="4" style="text-align: center; padding: 30px;">No logs found for selected date range</td></tr>';
                     showNotification('No logs found for selected date range', 'error');
                 }
             } catch (error) {
@@ -1601,12 +1694,12 @@ if (isset($_GET['action'])) {
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.3,
                             pointBackgroundColor: '#10b981',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
+                            pointRadius: 2,
+                            pointHoverRadius: 4
                         },
                         {
                             label: 'Warning',
@@ -1615,12 +1708,12 @@ if (isset($_GET['action'])) {
                             backgroundColor: 'rgba(245, 158, 11, 0.1)',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.3,
                             pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
+                            pointRadius: 2,
+                            pointHoverRadius: 4
                         },
                         {
                             label: 'Critical',
@@ -1629,12 +1722,12 @@ if (isset($_GET['action'])) {
                             backgroundColor: 'rgba(239, 68, 68, 0.1)',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.3,
                             pointBackgroundColor: '#ef4444',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
+                            pointRadius: 2,
+                            pointHoverRadius: 4
                         }
                     ]
                 },
@@ -1646,7 +1739,7 @@ if (isset($_GET['action'])) {
                             labels: {
                                 color: '#cbd5e1',
                                 font: {
-                                    size: 12
+                                    size: 11
                                 }
                             }
                         },
@@ -1663,24 +1756,26 @@ if (isset($_GET['action'])) {
                         x: {
                             grid: {
                                 color: 'rgba(71, 85, 105, 0.2)',
+                                drawBorder: false
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 9
                                 },
-                                maxTicksLimit: 12
+                                maxTicksLimit: 10
                             }
                         },
                         y: {
                             beginAtZero: true,
                             grid: {
                                 color: 'rgba(71, 85, 105, 0.2)',
+                                drawBorder: false
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 9
                                 },
                                 callback: function(value) {
                                     return value + '°C';
@@ -1713,9 +1808,15 @@ if (isset($_GET['action'])) {
                     const criticalData = [];
                     const labels = [];
                     
-                    data.data.forEach((item, index) => {
+                    // Limit data points for performance
+                    const maxPoints = window.innerWidth < 768 ? 50 : 100;
+                    const step = Math.ceil(data.data.length / maxPoints);
+                    
+                    for (let i = 0; i < data.data.length; i += step) {
+                        const item = data.data[i];
                         const date = new Date(item.x);
-                        const label = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
+                                     date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                         labels.push(label);
                         
                         if (item.status === 'CRITICAL') {
@@ -1731,7 +1832,7 @@ if (isset($_GET['action'])) {
                             warningData.push(null);
                             normalData.push(item.y);
                         }
-                    });
+                    }
                     
                     if (historyChart) {
                         historyChart.data.labels = labels;
@@ -1740,7 +1841,7 @@ if (isset($_GET['action'])) {
                         historyChart.data.datasets[2].data = criticalData;
                         historyChart.update();
                     }
-                    showNotification(`Showing ${data.data.length} data points`, 'success');
+                    showNotification(`Showing ${labels.length} data points`, 'success');
                 } else {
                     if (historyChart) {
                         historyChart.data.labels = [];
@@ -1776,8 +1877,7 @@ if (isset($_GET['action'])) {
                 return;
             }
             
-            // Note: This downloads all CSV data. For true filtered download, we'd need a new endpoint
-            showNotification('Downloading all CSV data. Use date filters in spreadsheet application.', 'success');
+            showNotification('Downloading CSV data', 'success');
             setTimeout(() => {
                 downloadCSV();
             }, 500);
@@ -1792,8 +1892,7 @@ if (isset($_GET['action'])) {
                 return;
             }
             
-            // Note: This downloads all log data. For true filtered download, we'd need a new endpoint
-            showNotification('Downloading all log data. Use search in text editor to filter.', 'success');
+            showNotification('Downloading log file', 'success');
             setTimeout(() => {
                 downloadLogFile();
             }, 500);
@@ -1831,32 +1930,44 @@ if (isset($_GET['action'])) {
         async function sendTempToLog(temp) {
             const payload = { temp };
             try {
-                const res = await fetch('./api/log_temp.php', {
+                await fetch('./api/log_temp.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const json = await res.json();
-                if (!json.ok) {
-                    console.warn('Logging failed:', json);
-                }
             } catch (err) {
                 console.error('Failed to send temp to log:', err);
             }
         }
 
+        // Handle window resize
+        function handleResize() {
+            if (liveChart) {
+                liveChart.resize();
+            }
+            if (historyChart) {
+                historyChart.resize();
+            }
+        }
+
         // Initialize
         window.onload = function() {
-            // Initialize charts
+            // Initialize live chart
             initLiveChart();
             
-            // Start temperature monitoring
+            // Start temperature monitoring with faster initial load
             getTemperature();
+            
+            // Set up auto-refresh for temperature (every 30 seconds for live updates)
+            temperatureUpdateInterval = setInterval(getTemperature, 30000);
+            
+            // Set up config-based refresh for iDRAC calls
             setInterval(getTemperature, AUTO_REFRESH_MS);
             
             // Initialize with some data
+            const now = new Date();
             for (let i = 0; i < 10; i++) {
-                const time = new Date(Date.now() - (10 - i) * 60000);
+                const time = new Date(now.getTime() - (10 - i) * 60000);
                 const timeStr = time.getHours().toString().padStart(2, '0') + ':' + 
                               time.getMinutes().toString().padStart(2, '0');
                 chartData.labels.push(timeStr);
@@ -1867,7 +1978,20 @@ if (isset($_GET['action'])) {
                 liveChart.update();
                 addThresholdLines();
             }
+            
+            // Add resize listener
+            window.addEventListener('resize', handleResize);
         };
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (temperatureUpdateInterval) {
+                clearInterval(temperatureUpdateInterval);
+            }
+            if (liveLogsInterval) {
+                clearInterval(liveLogsInterval);
+            }
+        });
     </script>
 </body>
 </html>
