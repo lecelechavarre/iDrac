@@ -1,8 +1,11 @@
 <?php
-// iDRAC Temperature Monitor - Clean UI Version
+// iDRAC Temperature Monitor - Enhanced Version
+// Include configuration
 require_once __DIR__ . '/idrac_config.php';
+
 date_default_timezone_set($CONFIG['timezone']);
 
+// Small state file to avoid duplicate alert emails
 define('IDRAC_STATE_FILE', __DIR__ . '/idrac_state.json');
 define('LOG_FILE', __DIR__ . '/idrac_log.csv');
 define('STORAGE_LOG_FILE', __DIR__ . '/storage/temperature.log');
@@ -31,10 +34,28 @@ function format_ts($ts = null): string {
     return date('Y-m-d H:i:s', $ts ?? time());
 }
 
-// =============== LOGGING FUNCTIONS ===============
+// =============== ENHANCED LOGGING FUNCTIONS ===============
 function log_temperature(float $temp, string $status): void {
     $log_entry = sprintf('%s,%.1f,%s', format_ts(), $temp, $status) . PHP_EOL;
     @file_put_contents(LOG_FILE, $log_entry, FILE_APPEND | LOCK_EX);
+}
+
+function get_logs(): array {
+    $logs = [];
+    if (file_exists(LOG_FILE)) {
+        $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            $parts = explode(',', $line);
+            if (count($parts) === 3) {
+                $logs[] = [
+                    'timestamp' => $parts[0],
+                    'temperature' => floatval($parts[1]),
+                    'status' => $parts[2]
+                ];
+            }
+        }
+    }
+    return $logs;
 }
 
 function get_storage_logs(): array {
@@ -42,6 +63,7 @@ function get_storage_logs(): array {
     if (file_exists(STORAGE_LOG_FILE)) {
         $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
+            // Parse format: [2026-01-12 14:17:13] temp=16.00°C, ip=10.129.8.25
             if (preg_match('/\[([^\]]+)\]\s*temp=([\d\.]+).*?ip=([\d\.]+)/', $line, $matches)) {
                 $logs[] = [
                     'timestamp' => $matches[1],
@@ -52,7 +74,7 @@ function get_storage_logs(): array {
             }
         }
     }
-    return array_slice($logs, -200);
+    return array_slice($logs, -200); // Last 200 entries
 }
 
 function download_logs(string $type = 'csv'): void {
@@ -95,6 +117,7 @@ function send_hourly_email(): bool {
     $current_hour = (int)date('H');
     $state = load_state();
     
+    // Check if we've already sent an email this hour
     if ($state['last_hourly_email'] === $current_hour) {
         return false;
     }
@@ -120,7 +143,7 @@ function send_hourly_email(): bool {
     return false;
 }
 
-// =============== ALERT LOGIC ===============
+// =============== EXTENDED ALERT LOGIC ===============
 function check_extended_alerts(float $temp, string $status, string $timestamp): void {
     global $CONFIG;
     $state = load_state();
@@ -128,11 +151,13 @@ function check_extended_alerts(float $temp, string $status, string $timestamp): 
     $send_alert = false;
     $alert_type = '';
     
+    // Check for status changes
     if (in_array($status, ['WARNING', 'CRITICAL'], true) && 
         $state['last_alert_status'] !== $status) {
         $send_alert = true;
         $alert_type = 'STATUS_CHANGE';
         
+        // Update start times
         if ($status === 'WARNING') {
             $state['warning_start_time'] = $current_time;
         } elseif ($status === 'CRITICAL') {
@@ -140,9 +165,10 @@ function check_extended_alerts(float $temp, string $status, string $timestamp): 
         }
     }
     
+    // Check for 5-minute persistent alerts
     if ($status === 'WARNING' && $state['warning_start_time'] !== null) {
         $duration = $current_time - $state['warning_start_time'];
-        if ($duration >= 300 && $duration < 360) {
+        if ($duration >= 300 && $duration < 360) { // 5-6 minutes to avoid duplicates
             $send_alert = true;
             $alert_type = 'PERSISTENT_WARNING';
         }
@@ -150,12 +176,13 @@ function check_extended_alerts(float $temp, string $status, string $timestamp): 
     
     if ($status === 'CRITICAL' && $state['critical_start_time'] !== null) {
         $duration = $current_time - $state['critical_start_time'];
-        if ($duration >= 300 && $duration < 360) {
+        if ($duration >= 300 && $duration < 360) { // 5-6 minutes to avoid duplicates
             $send_alert = true;
             $alert_type = 'PERSISTENT_CRITICAL';
         }
     }
     
+    // Send alert if needed
     if ($send_alert) {
         $subject_prefix = '';
         if ($alert_type === 'PERSISTENT_WARNING') {
@@ -180,11 +207,13 @@ function check_extended_alerts(float $temp, string $status, string $timestamp): 
         }
     }
     
+    // Reset start times if status changed to normal
     if ($status === 'NORMAL') {
         $state['warning_start_time'] = null;
         $state['critical_start_time'] = null;
     }
     
+    // Always update last status
     $state['last_status'] = $status;
     save_state($state);
 }
@@ -219,11 +248,12 @@ function get_iDRAC_temperature(): array {
         if (isset($data['Temperatures']) && is_array($data['Temperatures'])) {
             foreach ($data['Temperatures'] as $sensor) {
                 if (isset($sensor['ReadingCelsius'])) {
-                    $temp = $sensor['ReadingCelsius'] - 62;
+                    $temp = $sensor['ReadingCelsius'] - 62; // Apply correction
                     if ($temp >= 0 && $temp <= 100) {
                         $status = get_temp_status($temp);
                         $timestamp = format_ts();
                         
+                        // Log every 5 minutes
                         $current_minute = (int)date('i');
                         if ($current_minute % 5 === 0) {
                             log_temperature($temp, $status);
@@ -251,7 +281,7 @@ function get_temp_status($temp): string {
     return 'NORMAL';
 }
 
-// =============== EMAIL FUNCTIONS ===============
+// =============== ENHANCED EMAIL FUNCTIONS ===============
 function send_email(string $subject, string $message): bool {
     global $CONFIG;
     
@@ -259,16 +289,19 @@ function send_email(string $subject, string $message): bool {
     $from = $CONFIG['email_from'];
     $from_name = $CONFIG['email_from_name'];
     
+    // Use company internal relay (port 25, no auth)
     if ($CONFIG['transport'] === 'smtp' && $CONFIG['smtp_host'] === 'mrelay.intra.j-display.com') {
         return send_email_internal_relay($subject, $message, $to, $from, $from_name);
     }
     
+    // Fallback to standard mail() function
     return send_email_simple($subject, $message, $to, $from, $from_name);
 }
 
 function send_email_internal_relay(string $subject, string $message, string $to, string $from, string $from_name): bool {
     global $CONFIG;
     
+    // Prepare headers
     $headers = [];
     $headers[] = "From: {$from_name} <{$from}>";
     $headers[] = "Reply-To: {$from}";
@@ -281,14 +314,17 @@ function send_email_internal_relay(string $subject, string $message, string $to,
     
     $headers_str = implode("\r\n", $headers);
     
+    // Log email attempt
     error_log("Attempting to send email via internal relay to: {$to}");
     
+    // Use PHP's mail() function - it should use your server's MTA which is configured to use mrelay
     $result = @mail($to, $subject, $message, $headers_str);
     
     if ($result) {
         error_log("Email sent successfully to: {$to}");
     } else {
         error_log("Failed to send email to: {$to}");
+        // Try alternative method
         $result = send_email_alternative($subject, $message, $to, $from, $from_name);
     }
     
@@ -296,6 +332,7 @@ function send_email_internal_relay(string $subject, string $message, string $to,
 }
 
 function send_email_alternative(string $subject, string $message, string $to, string $from, string $from_name): bool {
+    // Alternative: use fsockopen to directly connect to SMTP
     global $CONFIG;
     
     $smtp_host = $CONFIG['smtp_host'];
@@ -309,14 +346,18 @@ function send_email_alternative(string $subject, string $message, string $to, st
             return false;
         }
         
+        // Read welcome message
         $response = fgets($socket, 515);
         
+        // Send HELO/EHLO
         fputs($socket, "HELO " . $_SERVER['SERVER_NAME'] . "\r\n");
         $response = fgets($socket, 515);
         
+        // Set MAIL FROM
         fputs($socket, "MAIL FROM: <{$from}>\r\n");
         $response = fgets($socket, 515);
         
+        // Set RCPT TO
         $recipients = explode(',', $to);
         foreach ($recipients as $recipient) {
             $recipient = trim($recipient);
@@ -326,9 +367,11 @@ function send_email_alternative(string $subject, string $message, string $to, st
             }
         }
         
+        // Send DATA
         fputs($socket, "DATA\r\n");
         $response = fgets($socket, 515);
         
+        // Send email headers and body
         $email_data = "From: {$from_name} <{$from}>\r\n";
         $email_data .= "To: {$to}\r\n";
         $email_data .= "Subject: {$subject}\r\n";
@@ -341,6 +384,7 @@ function send_email_alternative(string $subject, string $message, string $to, st
         fputs($socket, $email_data);
         $response = fgets($socket, 515);
         
+        // Quit
         fputs($socket, "QUIT\r\n");
         fclose($socket);
         
@@ -362,7 +406,7 @@ function send_email_simple(string $subject, string $message, string $to, string 
     return @mail($to, $subject, $message, $headers_str);
 }
 
-// =============== EMAIL BUILDERS ===============
+// =============== PROFESSIONAL EMAIL ===============
 function build_email_subject(string $kind, string $status, float $temp): string {
     global $CONFIG;
     $host = parse_url($CONFIG['idrac_url'], PHP_URL_HOST);
@@ -381,10 +425,12 @@ function build_email_body(array $payload): string {
         'Time: ' . ($payload['timestamp'] ?? format_ts()),
     ];
 
+    // Add duration for persistent alerts
     if (isset($payload['duration'])) {
         $lines[] = 'Duration: ' . $payload['duration'];
     }
 
+    // For alerts, optionally include a one-line recommendation
     if (($payload['kind'] ?? '') === 'Alert') {
         if ($payload['status'] === 'CRITICAL') {
             $lines[] = 'Action: Immediate attention recommended (check cooling, workloads, iDRAC).';
@@ -396,7 +442,7 @@ function build_email_body(array $payload): string {
     return implode("\n", $lines);
 }
 
-// =============== CLI SUPPORT ===============
+// Allow running the hourly email from CLI: `php idrac.php hourly`
 if (php_sapi_name() === 'cli') {
     global $argv;
     if (!empty($argv) && (in_array('hourly', $argv, true) || in_array('--hourly', $argv, true))) {
@@ -413,7 +459,10 @@ if (isset($_GET['action'])) {
         case 'get_temp':
             $result = get_iDRAC_temperature();
             if ($result['success']) {
+                // Check for extended alerts (5-minute persistent alerts)
                 check_extended_alerts($result['temperature'], $result['status'], $result['timestamp']);
+                
+                // Check for hourly email
                 send_hourly_email();
             }
             echo json_encode($result);
@@ -495,21 +544,26 @@ if (isset($_GET['action'])) {
     }
     exit;
 }
+
+// =============== HTML INTERFACE ===============
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iTM - iDRAC Temperature Monitor</title>
+    <!-- Chart.js for graphing -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
+            --bg-card: #334155;
             --text-primary: #f1f5f9;
             --text-secondary: #cbd5e1;
             --text-muted: #94a3b8;
+            --border: #475569;
             --accent: #3b82f6;
             --success: #10b981;
             --warning: #f59e0b;
@@ -524,27 +578,29 @@ if (isset($_GET['action'])) {
         }
         
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
-            padding: 20px;
+            overflow-x: hidden;
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
+            padding: 20px;
             display: grid;
             grid-template-columns: 1fr;
             gap: 20px;
         }
         
-        /* Header - Clean, no borders */
+        /* Header - No border, no shadow */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0;
+            padding: 15px 0;
+            background: transparent;
         }
         
         .logo-container {
@@ -564,26 +620,38 @@ if (isset($_GET['action'])) {
             font-weight: 800;
             font-size: 20px;
             color: white;
+            overflow: hidden;
+        }
+        
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .header h1 {
             font-size: 28px;
             font-weight: 700;
             color: var(--text-primary);
+            letter-spacing: 0.5px;
         }
         
         .header-subtitle {
             font-size: 13px;
             color: var(--text-muted);
-            margin-top: 2px;
+            margin-top: 3px;
+            font-weight: 400;
         }
         
         .refresh-indicator {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             font-size: 13px;
             color: var(--text-muted);
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
         }
         
         .refresh-dot {
@@ -596,7 +664,7 @@ if (isset($_GET['action'])) {
         
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.7; }
         }
         
         /* Main Dashboard Grid */
@@ -612,8 +680,9 @@ if (isset($_GET['action'])) {
             }
         }
         
-        /* Temperature Card - No borders */
+        /* Temperature Card - No border, no shadow */
         .temp-card {
+            background: transparent;
             padding: 30px;
             display: flex;
             flex-direction: column;
@@ -624,15 +693,15 @@ if (isset($_GET['action'])) {
             font-size: 13px;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             margin-bottom: 15px;
             font-weight: 600;
         }
         
         .temp-display {
-            font-size: 80px;
+            font-size: 84px;
             font-weight: 800;
-            margin: 10px 0;
+            margin: 15px 0;
             line-height: 1;
             transition: color 0.3s ease;
         }
@@ -644,30 +713,36 @@ if (isset($_GET['action'])) {
         
         .status {
             display: inline-block;
-            padding: 10px 25px;
+            padding: 10px 28px;
             border-radius: 25px;
             font-weight: 700;
-            font-size: 14px;
+            font-size: 15px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
             margin: 10px 0;
+            border: 2px solid;
+            transition: all 0.3s ease;
         }
         
         .normal { 
-            background: rgba(16, 185, 129, 0.1); 
+            background: rgba(16, 185, 129, 0.15); 
             color: var(--success);
+            border-color: var(--success);
         }
         .warning { 
-            background: rgba(245, 158, 11, 0.1); 
+            background: rgba(245, 158, 11, 0.15); 
             color: var(--warning);
+            border-color: var(--warning);
         }
         .critical { 
-            background: rgba(239, 68, 68, 0.1); 
+            background: rgba(239, 68, 68, 0.15); 
             color: var(--critical);
+            border-color: var(--critical);
         }
         .unknown { 
-            background: rgba(107, 114, 128, 0.1); 
+            background: rgba(107, 114, 128, 0.15); 
             color: var(--unknown);
+            border-color: var(--unknown);
         }
         
         .meta {
@@ -677,7 +752,7 @@ if (isset($_GET['action'])) {
             text-align: center;
         }
         
-        /* Stats Grid - No borders */
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -687,7 +762,9 @@ if (isset($_GET['action'])) {
         }
         
         .stat-card {
+            background: rgba(30, 41, 59, 0.4);
             padding: 20px;
+            border-radius: 12px;
             text-align: center;
         }
         
@@ -706,16 +783,17 @@ if (isset($_GET['action'])) {
             font-weight: 600;
         }
         
-        /* Controls Panel - Clean, only buttons have borders */
+        /* Controls Panel - Minimal, only buttons */
         .controls-panel {
+            background: transparent;
             padding: 30px;
         }
         
+        /* Only show buttons grid, remove titles and other elements */
         .controls-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 12px;
-            margin-top: 10px;
         }
         
         @media (max-width: 768px) {
@@ -724,25 +802,25 @@ if (isset($_GET['action'])) {
             }
         }
         
-        /* BUTTONS ONLY WITH BORDERS */
+        /* Buttons with border only */
         .btn {
             padding: 18px;
+            border: 1px solid var(--border);
             border-radius: 12px;
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
-            background: transparent;
+            background: rgba(30, 41, 59, 0.4);
             color: var(--text-primary);
-            border: 2px solid var(--text-muted);
         }
         
         .btn:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(30, 41, 59, 0.7);
             transform: translateY(-2px);
         }
         
@@ -761,21 +839,28 @@ if (isset($_GET['action'])) {
             color: var(--warning);
         }
         
+        .btn-danger { 
+            border-color: var(--critical);
+            color: var(--critical);
+        }
+        
         .btn-info { 
             border-color: #06b6d4;
             color: #06b6d4;
         }
         
-        /* Graphs Section - No borders */
+        /* Graphs Section - No border, no shadow */
         .graphs-section {
-            padding: 30px;
+            grid-column: 1 / -1;
+            background: transparent;
+            padding: 0;
         }
         
         .graphs-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         
         .graph-container {
@@ -793,31 +878,35 @@ if (isset($_GET['action'])) {
         .tabs {
             display: flex;
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .tab {
             padding: 10px 20px;
-            background: transparent;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 10px;
             color: var(--text-secondary);
             cursor: pointer;
-            transition: all 0.2s ease;
-            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 14px;
         }
         
         .tab.active {
-            background: var(--accent);
-            color: white;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent);
+            border-color: var(--accent);
         }
         
         .tab:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(30, 41, 59, 0.6);
         }
         
-        /* Logs Table - Clean */
+        /* Logs Table */
         .logs-table-container {
             max-height: 350px;
             overflow-y: auto;
+            border-radius: 10px;
         }
         
         .logs-table {
@@ -826,40 +915,51 @@ if (isset($_GET['action'])) {
         }
         
         .logs-table th {
-            padding: 15px;
+            position: sticky;
+            top: 0;
+            background: rgba(30, 41, 59, 0.8);
+            padding: 14px;
             text-align: left;
             color: var(--text-muted);
             font-weight: 600;
             font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
         }
         
         .logs-table td {
-            padding: 15px;
+            padding: 14px;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
             color: var(--text-secondary);
         }
         
         .logs-table tr:hover {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(255, 255, 255, 0.05);
         }
         
-        /* Notification - Clean */
+        /* Notification */
         .notification {
             position: fixed;
             top: 20px;
             right: 20px;
-            padding: 15px 25px;
-            border-radius: 10px;
-            background: var(--bg-secondary);
+            padding: 16px 24px;
+            border-radius: 12px;
+            background: rgba(51, 65, 85, 0.95);
+            backdrop-filter: blur(10px);
             display: none;
             z-index: 1000;
             animation: slideInRight 0.3s ease;
+            border: 1px solid var(--border);
             max-width: 300px;
         }
         
         .notification.error {
-            background: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--critical);
+        }
+        
+        .notification.success {
+            border-left: 4px solid var(--success);
         }
         
         @keyframes slideInRight {
@@ -876,14 +976,16 @@ if (isset($_GET['action'])) {
             transform: translate(-50%, -50%);
             z-index: 1000;
             background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
             padding: 30px;
             border-radius: 15px;
+            border: 1px solid var(--border);
         }
         
         .spinner {
             width: 50px;
             height: 50px;
-            border: 3px solid var(--text-muted);
+            border: 3px solid var(--border);
             border-top: 3px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -901,7 +1003,7 @@ if (isset($_GET['action'])) {
             text-align: center;
         }
         
-        /* System Status - Clean */
+        /* System Status */
         .system-status {
             display: flex;
             align-items: center;
@@ -918,45 +1020,55 @@ if (isset($_GET['action'])) {
         }
         
         .status-dot.online { 
-            background: var(--success); 
+            background: var(--success);
+        }
+        .status-dot.offline { 
+            background: var(--critical);
         }
         
-        /* Scrollbar */
+        /* Scrollbar Styling */
         ::-webkit-scrollbar {
             width: 6px;
         }
         
         ::-webkit-scrollbar-track {
-            background: transparent;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 3px;
         }
         
         ::-webkit-scrollbar-thumb {
-            background: var(--text-muted);
+            background: var(--border);
             border-radius: 3px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent);
         }
+        
+        /* Remove footer completely */
+        .footer {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header - No borders -->
+        <!-- Header -->
         <div class="header">
             <div class="logo-container">
                 <div class="logo">
-                    iTM
+                    <!-- Placeholder for your logo - replace with actual logo -->
+                    <div style="color: white; font-weight: 800; font-size: 18px;">iTM</div>
                 </div>
                 <div>
                     <h1>iTM</h1>
-                    <div class="header-subtitle">iDRAC Temperature Monitor</div>
+                    <div class="header-subtitle">iDRAC Temperature Monitoring System</div>
                 </div>
             </div>
             
             <div class="refresh-indicator">
                 <div class="refresh-dot"></div>
-                <span>Auto-refresh: <?php echo (int)$CONFIG['check_interval']; ?> min</span>
+                <span>Auto-refresh: <?php echo (int)$CONFIG['check_interval']; ?> minutes</span>
             </div>
         </div>
 
@@ -968,6 +1080,11 @@ if (isset($_GET['action'])) {
                 <div class="temp-display" id="temperature">-- °C</div>
                 <div class="status unknown" id="statusIndicator">UNKNOWN</div>
                 <div id="lastUpdate" class="meta">Last updated: --</div>
+                
+                <div class="system-status">
+                    <div class="status-dot online"></div>
+                    <span>iDRAC Connection: Active</span>
+                </div>
                 
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -985,8 +1102,9 @@ if (isset($_GET['action'])) {
                 </div>
             </div>
 
-            <!-- Controls Panel - Only buttons shown -->
+            <!-- Controls Panel - BUTTONS ONLY -->
             <div class="controls-panel">
+                <!-- Only buttons grid remains -->
                 <div class="controls-grid">
                     <button class="btn btn-primary" onclick="getTemperature()">
                         <span>🔄</span>
@@ -1005,11 +1123,6 @@ if (isset($_GET['action'])) {
                         View Logs
                     </button>
                 </div>
-                
-                <div class="system-status">
-                    <div class="status-dot online"></div>
-                    <span>Server: <?php echo htmlspecialchars($CONFIG['smtp_host']); ?></span>
-                </div>
             </div>
         </div>
 
@@ -1020,7 +1133,7 @@ if (isset($_GET['action'])) {
                 <div class="tabs">
                     <div class="tab active" onclick="showTab('graph')">Live Graph</div>
                     <div class="tab" onclick="showTab('history')">History Graph</div>
-                    <div class="tab" onclick="showTab('logs')">View Logs</div>
+                    <div class="tab" onclick="showTab('logs')">View Logs</div> <!-- Changed from "Raw Logs" to "View Logs" -->
                 </div>
             </div>
             
@@ -1029,14 +1142,14 @@ if (isset($_GET['action'])) {
                 <div class="graph-container">
                     <canvas id="tempChart"></canvas>
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <div style="display: flex; gap: 10px;">
                     <button class="btn btn-info" onclick="downloadCSV()">
                         <span>📥</span>
-                        Download CSV
+                        Download CSV Logs
                     </button>
                     <button class="btn btn-info" onclick="downloadStorageLogs()">
                         <span>📥</span>
-                        Download Logs
+                        Download Storage Logs
                     </button>
                     <button class="btn btn-primary" onclick="refreshGraph()">
                         <span>🔄</span>
@@ -1065,7 +1178,7 @@ if (isset($_GET['action'])) {
                             </tr>
                         </thead>
                         <tbody id="logsBody">
-                            <tr><td colspan="4" style="text-align: center; padding: 30px;">Loading logs...</td></tr>
+                            <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading logs...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1076,7 +1189,7 @@ if (isset($_GET['action'])) {
                     </button>
                     <button class="btn btn-info" onclick="clearLogs()">
                         <span>🗑️</span>
-                        Clear View
+                        Clear Table
                     </button>
                 </div>
             </div>
@@ -1203,7 +1316,7 @@ if (isset($_GET['action'])) {
                     `).join('');
                 } else {
                     document.getElementById('logsBody').innerHTML = 
-                        '<tr><td colspan="4" style="text-align: center; padding: 30px;">No logs available</td></tr>';
+                        '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs available</td></tr>';
                 }
             } catch (error) {
                 showNotification('Failed to load logs: ' + error.message, 'error');
@@ -1213,7 +1326,7 @@ if (isset($_GET['action'])) {
 
         function clearLogs() {
             document.getElementById('logsBody').innerHTML = 
-                '<tr><td colspan="4" style="text-align: center; padding: 30px;">Logs view cleared</td></tr>';
+                '<tr><td colspan="4" style="text-align: center; padding: 40px;">Logs cleared</td></tr>';
         }
 
         function getStatusClass(temp) {
@@ -1286,8 +1399,9 @@ if (isset($_GET['action'])) {
                         tension: 0.4,
                         pointBackgroundColor: '#3b82f6',
                         pointBorderColor: '#ffffff',
-                        pointBorderWidth: 1,
-                        pointRadius: 4
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -1314,7 +1428,7 @@ if (isset($_GET['action'])) {
                     scales: {
                         x: {
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)',
+                                color: 'rgba(71, 85, 105, 0.2)'
                             },
                             ticks: {
                                 color: '#94a3b8',
@@ -1326,7 +1440,7 @@ if (isset($_GET['action'])) {
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)',
+                                color: 'rgba(71, 85, 105, 0.2)'
                             },
                             ticks: {
                                 color: '#94a3b8',
@@ -1340,7 +1454,8 @@ if (isset($_GET['action'])) {
                         }
                     },
                     animation: {
-                        duration: 800
+                        duration: 800,
+                        easing: 'easeOutQuart'
                     }
                 }
             });
@@ -1349,8 +1464,8 @@ if (isset($_GET['action'])) {
             addThresholdLines();
             
             // Start with some initial data
-            for (let i = 0; i < 8; i++) {
-                updateChart(currentTemp || 20, new Date(Date.now() - (8 - i) * 60000).toLocaleTimeString());
+            for (let i = 0; i < 10; i++) {
+                updateChart(currentTemp || 20, new Date(Date.now() - (10 - i) * 60000).toLocaleTimeString());
             }
         }
 
@@ -1371,8 +1486,9 @@ if (isset($_GET['action'])) {
                         tension: 0.4,
                         pointBackgroundColor: '#10b981',
                         pointBorderColor: '#ffffff',
-                        pointBorderWidth: 1,
-                        pointRadius: 3
+                        pointBorderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
                     }]
                 },
                 options: {
@@ -1399,7 +1515,7 @@ if (isset($_GET['action'])) {
                     scales: {
                         x: {
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)',
+                                color: 'rgba(71, 85, 105, 0.2)'
                             },
                             ticks: {
                                 color: '#94a3b8',
@@ -1412,7 +1528,7 @@ if (isset($_GET['action'])) {
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)',
+                                color: 'rgba(71, 85, 105, 0.2)'
                             },
                             ticks: {
                                 color: '#94a3b8',
@@ -1440,7 +1556,7 @@ if (isset($_GET['action'])) {
             
             // Add warning line
             tempChart.data.datasets.push({
-                label: 'Warning',
+                label: 'Warning Threshold',
                 data: Array(tempChart.data.labels.length).fill(warningLine),
                 borderColor: '#f59e0b',
                 backgroundColor: 'transparent',
@@ -1452,7 +1568,7 @@ if (isset($_GET['action'])) {
             
             // Add critical line
             tempChart.data.datasets.push({
-                label: 'Critical',
+                label: 'Critical Threshold',
                 data: Array(tempChart.data.labels.length).fill(criticalLine),
                 borderColor: '#ef4444',
                 backgroundColor: 'transparent',
@@ -1469,7 +1585,7 @@ if (isset($_GET['action'])) {
             if (!tempChart) return;
             
             // Add new data point
-            tempChart.data.labels.push(timestamp.split(' ')[1]);
+            tempChart.data.labels.push(timestamp.split(' ')[1]); // Just the time part
             tempChart.data.datasets[0].data.push(temp);
             
             // Update threshold lines
@@ -1478,8 +1594,8 @@ if (isset($_GET['action'])) {
                 tempChart.data.datasets[2].data.push(<?php echo $CONFIG['critical_temp']; ?>);
             }
             
-            // Keep only last 15 points
-            if (tempChart.data.labels.length > 15) {
+            // Keep only last 20 points
+            if (tempChart.data.labels.length > 20) {
                 tempChart.data.labels.shift();
                 tempChart.data.datasets.forEach(dataset => {
                     dataset.data.shift();
@@ -1498,13 +1614,10 @@ if (isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success) {
-                    const labels = data.data.map(item => {
-                        const time = item.x.split(' ')[1];
-                        return time.substring(0, 5); // HH:MM format
-                    });
+                    const labels = data.data.map(item => item.x.split(' ')[1]);
                     const temps = data.data.map(item => item.y);
                     
-                    historyChart.data.labels = labels.slice(-40);
+                    historyChart.data.labels = labels.slice(-40); // Last 40 points
                     historyChart.data.datasets[0].data = temps.slice(-40);
                     
                     historyChart.update();
@@ -1525,6 +1638,7 @@ if (isset($_GET['action'])) {
                 }
                 tempChart.update();
                 
+                // Re-add threshold lines
                 addThresholdLines();
             }
         }
@@ -1533,11 +1647,11 @@ if (isset($_GET['action'])) {
             const el = document.getElementById('notification');
             el.textContent = message;
             el.style.display = 'block';
-            el.className = 'notification' + (type === 'error' ? ' error' : '');
+            el.className = 'notification ' + (type === 'error' ? 'error' : 'success');
             
             setTimeout(() => {
                 el.style.display = 'none';
-            }, 3000);
+            }, 3500);
         }
 
         function showLoading(show) {
@@ -1550,10 +1664,14 @@ if (isset($_GET['action'])) {
             try {
                 const res = await fetch('./api/log_temp.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': application/json' },
+                    headers: { 'Content-Type: application/json' },
                     cache: 'no-store',
                     body: JSON.stringify(payload)
                 });
+                const json = await res.json();
+                if (!json.ok) {
+                    console.warn('Logging failed:', json);
+                }
             } catch (err) {
                 console.error('Failed to send temp to log:', err);
             }
