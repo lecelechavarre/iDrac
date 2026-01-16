@@ -1,5 +1,5 @@
 <?php
-// iDRAC Temperature Monitor - Enhanced Version
+// iDRAC Temperature Monitor - Simplified UI Version
 // Include configuration
 require_once __DIR__ . '/idrac_config.php';
 
@@ -591,36 +591,35 @@ if (isset($_GET['action'])) {
             padding: 20px;
             display: grid;
             grid-template-columns: 1fr;
-            gap: 20px;
+            gap: 24px;
         }
         
-        /* Header - No border, no shadow */
+        /* Header - NO BORDER, NO SHADOW */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 15px 0;
-            background: transparent;
+            padding: 20px 30px;
+            background: var(--bg-secondary);
         }
         
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 20px;
         }
         
         .logo {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-            border-radius: 12px;
+            border-radius: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 20px;
+            font-size: 24px;
             color: white;
-            overflow: hidden;
         }
         
         .logo img {
@@ -630,48 +629,52 @@ if (isset($_GET['action'])) {
         }
         
         .header h1 {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
             color: var(--text-primary);
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
         }
         
         .header-subtitle {
-            font-size: 13px;
+            font-size: 14px;
             color: var(--text-muted);
-            margin-top: 3px;
+            margin-top: 5px;
             font-weight: 400;
         }
         
         .refresh-indicator {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 13px;
+            gap: 12px;
+            font-size: 14px;
             color: var(--text-muted);
-            padding: 8px 15px;
+            padding: 10px 20px;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
+            border-radius: 12px;
         }
         
         .refresh-dot {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: var(--success);
             animation: pulse 2s infinite;
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            0%, 100% { 
+                opacity: 1; 
+            }
+            50% { 
+                opacity: 0.7;
+            }
         }
         
         /* Main Dashboard Grid */
         .dashboard-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 24px;
         }
         
         @media (max-width: 1200px) {
@@ -680,28 +683,29 @@ if (isset($_GET['action'])) {
             }
         }
         
-        /* Temperature Card - No border, no shadow */
+        /* Temperature Card - NO BORDER, NO SHADOW */
         .temp-card {
-            background: transparent;
-            padding: 30px;
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 40px;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
         
         .temp-label {
-            font-size: 13px;
+            font-size: 14px;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 15px;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
             font-weight: 600;
         }
         
         .temp-display {
-            font-size: 84px;
+            font-size: 96px;
             font-weight: 800;
-            margin: 15px 0;
+            margin: 20px 0;
             line-height: 1;
             transition: color 0.3s ease;
         }
@@ -713,200 +717,211 @@ if (isset($_GET['action'])) {
         
         .status {
             display: inline-block;
-            padding: 10px 28px;
-            border-radius: 25px;
+            padding: 12px 32px;
+            border-radius: 30px;
             font-weight: 700;
-            font-size: 15px;
-            letter-spacing: 0.5px;
+            font-size: 16px;
+            letter-spacing: 1px;
             text-transform: uppercase;
-            margin: 10px 0;
-            border: 2px solid;
+            margin: 15px 0;
             transition: all 0.3s ease;
         }
         
         .normal { 
-            background: rgba(16, 185, 129, 0.15); 
-            color: var(--success);
-            border-color: var(--success);
+            background: var(--success); 
+            color: white;
         }
         .warning { 
-            background: rgba(245, 158, 11, 0.15); 
-            color: var(--warning);
-            border-color: var(--warning);
+            background: var(--warning); 
+            color: white;
         }
         .critical { 
-            background: rgba(239, 68, 68, 0.15); 
-            color: var(--critical);
-            border-color: var(--critical);
+            background: var(--critical); 
+            color: white;
         }
         .unknown { 
-            background: rgba(107, 114, 128, 0.15); 
-            color: var(--unknown);
-            border-color: var(--unknown);
+            background: var(--unknown); 
+            color: white;
         }
         
         .meta {
             color: var(--text-muted);
-            font-size: 13px;
-            margin-top: 10px;
+            font-size: 14px;
+            margin-top: 15px;
             text-align: center;
         }
         
-        /* Stats Grid */
+        /* Stats Grid - NO BORDER, NO SHADOW */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-top: 30px;
+            gap: 20px;
+            margin-top: 40px;
             width: 100%;
         }
         
         .stat-card {
-            background: rgba(30, 41, 59, 0.4);
-            padding: 20px;
-            border-radius: 12px;
+            background: var(--bg-secondary);
+            padding: 25px;
+            border-radius: 16px;
             text-align: center;
         }
         
         .stat-value {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 5px;
+            margin-bottom: 8px;
         }
         
         .stat-label {
             color: var(--text-muted);
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             font-weight: 600;
         }
         
-        /* Controls Panel - Minimal, only buttons */
+        /* Controls Panel - NO BORDER, NO SHADOW */
         .controls-panel {
-            background: transparent;
-            padding: 30px;
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 40px;
         }
         
-        /* Only show buttons grid, remove titles and other elements */
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
+        .panel-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
             gap: 12px;
         }
         
-        @media (max-width: 768px) {
-            .controls-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Buttons with border only */
+        /* BUTTONS ONLY - WITH BORDER */
         .btn {
-            padding: 18px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-size: 15px;
+            padding: 22px;
+            border-radius: 16px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            background: rgba(30, 41, 59, 0.4);
-            color: var(--text-primary);
+            gap: 12px;
+            color: white;
+            border: 2px solid transparent;
         }
         
         .btn:hover {
-            background: rgba(30, 41, 59, 0.7);
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            border-color: white;
         }
         
         .btn-primary { 
-            border-color: var(--accent);
-            color: var(--accent);
+            background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
         }
         
         .btn-success { 
-            border-color: var(--success);
-            color: var(--success);
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
         }
         
         .btn-warning { 
-            border-color: var(--warning);
-            color: var(--warning);
+            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
         }
         
         .btn-danger { 
-            border-color: var(--critical);
-            color: var(--critical);
+            background: linear-gradient(135deg, var(--critical) 0%, #dc2626 100%);
         }
         
         .btn-info { 
-            border-color: #06b6d4;
-            color: #06b6d4;
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
         }
         
-        /* Graphs Section - No border, no shadow */
+        /* System Status */
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 20px;
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.online { 
+            background: var(--success); 
+        }
+        .status-dot.offline { 
+            background: var(--critical); 
+        }
+        
+        /* Graphs Section - NO BORDER, NO SHADOW */
         .graphs-section {
             grid-column: 1 / -1;
-            background: transparent;
-            padding: 0;
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 40px;
         }
         
         .graphs-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
         
         .graph-container {
-            height: 350px;
+            height: 400px;
             position: relative;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
         
         .graph-title {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 600;
             color: var(--text-primary);
         }
         
         .tabs {
             display: flex;
-            gap: 8px;
-            margin-bottom: 15px;
+            gap: 10px;
+            margin-bottom: 20px;
         }
         
         .tab {
-            padding: 10px 20px;
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid var(--border);
-            border-radius: 10px;
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
             color: var(--text-secondary);
             cursor: pointer;
             transition: all 0.3s ease;
-            font-size: 14px;
         }
         
         .tab.active {
-            background: rgba(59, 130, 246, 0.2);
-            color: var(--accent);
-            border-color: var(--accent);
+            background: var(--accent);
+            color: white;
         }
         
         .tab:hover:not(.active) {
-            background: rgba(30, 41, 59, 0.6);
+            background: var(--bg-secondary);
         }
         
         /* Logs Table */
         .logs-table-container {
-            max-height: 350px;
+            max-height: 400px;
             overflow-y: auto;
-            border-radius: 10px;
+            border-radius: 12px;
         }
         
         .logs-table {
@@ -917,49 +932,45 @@ if (isset($_GET['action'])) {
         .logs-table th {
             position: sticky;
             top: 0;
-            background: rgba(30, 41, 59, 0.8);
-            padding: 14px;
+            background: var(--bg-secondary);
+            padding: 16px;
             text-align: left;
             color: var(--text-muted);
             font-weight: 600;
-            font-size: 13px;
+            font-size: 14px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 1px solid var(--border);
+            letter-spacing: 1px;
         }
         
         .logs-table td {
-            padding: 14px;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            padding: 16px;
             color: var(--text-secondary);
         }
         
-        .logs-table tr:hover {
+        .logs-table tr:nth-child(even) {
             background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .logs-table tr:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
         
         /* Notification */
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 16px 24px;
-            border-radius: 12px;
-            background: rgba(51, 65, 85, 0.95);
-            backdrop-filter: blur(10px);
+            top: 30px;
+            right: 30px;
+            padding: 20px 30px;
+            border-radius: 16px;
+            background: var(--bg-card);
             display: none;
             z-index: 1000;
             animation: slideInRight 0.3s ease;
-            border: 1px solid var(--border);
-            max-width: 300px;
+            border-left: 5px solid var(--success);
         }
         
         .notification.error {
-            border-left: 4px solid var(--critical);
-        }
-        
-        .notification.success {
-            border-left: 4px solid var(--success);
+            border-left-color: var(--critical);
         }
         
         @keyframes slideInRight {
@@ -975,21 +986,19 @@ if (isset($_GET['action'])) {
             left: 50%;
             transform: translate(-50%, -50%);
             z-index: 1000;
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(10px);
-            padding: 30px;
-            border-radius: 15px;
-            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            padding: 40px;
+            border-radius: 20px;
         }
         
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid var(--border);
-            border-top: 3px solid var(--accent);
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            margin: 0 auto 20px;
         }
         
         @keyframes spin {
@@ -999,55 +1008,27 @@ if (isset($_GET['action'])) {
         
         .loading-text {
             color: var(--text-primary);
-            font-size: 15px;
+            font-size: 16px;
             text-align: center;
-        }
-        
-        /* System Status */
-        .system-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-top: 15px;
-        }
-        
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        
-        .status-dot.online { 
-            background: var(--success);
-        }
-        .status-dot.offline { 
-            background: var(--critical);
         }
         
         /* Scrollbar Styling */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
         }
         
         ::-webkit-scrollbar-track {
-            background: rgba(30, 41, 59, 0.4);
-            border-radius: 3px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb {
             background: var(--border);
-            border-radius: 3px;
+            border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent);
-        }
-        
-        /* Remove footer completely */
-        .footer {
-            display: none;
         }
     </style>
 </head>
@@ -1058,7 +1039,7 @@ if (isset($_GET['action'])) {
             <div class="logo-container">
                 <div class="logo">
                     <!-- Placeholder for your logo - replace with actual logo -->
-                    <div style="color: white; font-weight: 800; font-size: 18px;">iTM</div>
+                    <div style="color: white; font-weight: 800; font-size: 20px;">iTM</div>
                 </div>
                 <div>
                     <h1>iTM</h1>
@@ -1102,26 +1083,14 @@ if (isset($_GET['action'])) {
                 </div>
             </div>
 
-            <!-- Controls Panel - BUTTONS ONLY -->
+            <!-- Controls Panel (EMPTIED BUT PRESERVED STRUCTURE) -->
             <div class="controls-panel">
-                <!-- Only buttons grid remains -->
-                <div class="controls-grid">
-                    <button class="btn btn-primary" onclick="getTemperature()">
-                        <span>🔄</span>
-                        Refresh Temperature
-                    </button>
-                    <button class="btn btn-success" onclick="sendReport()">
-                        <span>📧</span>
-                        Send Report Email
-                    </button>
-                    <button class="btn btn-warning" onclick="sendTestEmail()">
-                        <span>🧪</span>
-                        Test Email Config
-                    </button>
-                    <button class="btn btn-info" onclick="showLogs()">
-                        <span>📋</span>
-                        View Logs
-                    </button>
+                <!-- Removed: Temperature Thresholds panel title -->
+                <!-- Removed: Monitoring Controls buttons -->
+                <!-- System Status Only -->
+                <div class="system-status" style="margin-top: 0;">
+                    <div class="status-dot <?php echo $CONFIG['smtp_auth'] ? 'online' : 'offline'; ?>"></div>
+                    <span>SMTP: <?php echo htmlspecialchars($CONFIG['smtp_host']); ?>:<?php echo htmlspecialchars($CONFIG['smtp_port']); ?></span>
                 </div>
             </div>
         </div>
@@ -1133,7 +1102,7 @@ if (isset($_GET['action'])) {
                 <div class="tabs">
                     <div class="tab active" onclick="showTab('graph')">Live Graph</div>
                     <div class="tab" onclick="showTab('history')">History Graph</div>
-                    <div class="tab" onclick="showTab('logs')">View Logs</div> <!-- Changed from "Raw Logs" to "View Logs" -->
+                    <div class="tab" onclick="showTab('logs')">View Logs</div> <!-- CHANGED: Raw Logs -> View Logs -->
                 </div>
             </div>
             
@@ -1142,7 +1111,7 @@ if (isset($_GET['action'])) {
                 <div class="graph-container">
                     <canvas id="tempChart"></canvas>
                 </div>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 12px;">
                     <button class="btn btn-info" onclick="downloadCSV()">
                         <span>📥</span>
                         Download CSV Logs
@@ -1182,7 +1151,7 @@ if (isset($_GET['action'])) {
                         </tbody>
                     </table>
                 </div>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
                     <button class="btn btn-primary" onclick="refreshLogs()">
                         <span>🔄</span>
                         Refresh Logs
@@ -1194,6 +1163,8 @@ if (isset($_GET['action'])) {
                 </div>
             </div>
         </div>
+        
+        <!-- FOOTER REMOVED COMPLETELY -->
     </div>
 
     <!-- Notification -->
@@ -1257,6 +1228,7 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
+        // EMAIL FUNCTIONALITY PRESERVED (but buttons removed)
         async function sendReport() {
             showLoading(true);
             try {
@@ -1394,14 +1366,14 @@ if (isset($_GET['action'])) {
                         data: [],
                         borderColor: '#3b82f6',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 2,
+                        borderWidth: 3,
                         fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#3b82f6',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        pointRadius: 5,
+                        pointHoverRadius: 8
                     }]
                 },
                 options: {
@@ -1412,7 +1384,8 @@ if (isset($_GET['action'])) {
                             labels: {
                                 color: '#cbd5e1',
                                 font: {
-                                    size: 13
+                                    size: 14,
+                                    family: "'Segoe UI', sans-serif"
                                 }
                             }
                         },
@@ -1422,30 +1395,30 @@ if (isset($_GET['action'])) {
                             bodyColor: '#cbd5e1',
                             borderColor: '#475569',
                             borderWidth: 1,
-                            cornerRadius: 6
+                            cornerRadius: 8
                         }
                     },
                     scales: {
                         x: {
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)'
+                                color: 'rgba(71, 85, 105, 0.3)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 12
                                 }
                             }
                         },
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)'
+                                color: 'rgba(71, 85, 105, 0.3)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 12
                                 },
                                 callback: function(value) {
                                     return value + '°C';
@@ -1454,7 +1427,7 @@ if (isset($_GET['action'])) {
                         }
                     },
                     animation: {
-                        duration: 800,
+                        duration: 1000,
                         easing: 'easeOutQuart'
                     }
                 }
@@ -1481,14 +1454,14 @@ if (isset($_GET['action'])) {
                         data: [],
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 2,
+                        borderWidth: 3,
                         fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#10b981',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
-                        pointRadius: 3,
-                        pointHoverRadius: 5
+                        pointRadius: 4,
+                        pointHoverRadius: 7
                     }]
                 },
                 options: {
@@ -1499,7 +1472,8 @@ if (isset($_GET['action'])) {
                             labels: {
                                 color: '#cbd5e1',
                                 font: {
-                                    size: 13
+                                    size: 14,
+                                    family: "'Segoe UI', sans-serif"
                                 }
                             }
                         },
@@ -1509,31 +1483,31 @@ if (isset($_GET['action'])) {
                             bodyColor: '#cbd5e1',
                             borderColor: '#475569',
                             borderWidth: 1,
-                            cornerRadius: 6
+                            cornerRadius: 8
                         }
                     },
                     scales: {
                         x: {
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)'
+                                color: 'rgba(71, 85, 105, 0.3)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 12
                                 },
-                                maxTicksLimit: 8
+                                maxTicksLimit: 10
                             }
                         },
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.2)'
+                                color: 'rgba(71, 85, 105, 0.3)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 11
+                                    size: 12
                                 },
                                 callback: function(value) {
                                     return value + '°C';
@@ -1560,8 +1534,8 @@ if (isset($_GET['action'])) {
                 data: Array(tempChart.data.labels.length).fill(warningLine),
                 borderColor: '#f59e0b',
                 backgroundColor: 'transparent',
-                borderWidth: 1.5,
-                borderDash: [4, 4],
+                borderWidth: 2,
+                borderDash: [5, 5],
                 fill: false,
                 pointRadius: 0
             });
@@ -1572,8 +1546,8 @@ if (isset($_GET['action'])) {
                 data: Array(tempChart.data.labels.length).fill(criticalLine),
                 borderColor: '#ef4444',
                 backgroundColor: 'transparent',
-                borderWidth: 1.5,
-                borderDash: [4, 4],
+                borderWidth: 2,
+                borderDash: [5, 5],
                 fill: false,
                 pointRadius: 0
             });
@@ -1617,8 +1591,8 @@ if (isset($_GET['action'])) {
                     const labels = data.data.map(item => item.x.split(' ')[1]);
                     const temps = data.data.map(item => item.y);
                     
-                    historyChart.data.labels = labels.slice(-40); // Last 40 points
-                    historyChart.data.datasets[0].data = temps.slice(-40);
+                    historyChart.data.labels = labels.slice(-50); // Last 50 points
+                    historyChart.data.datasets[0].data = temps.slice(-50);
                     
                     historyChart.update();
                 }
@@ -1647,11 +1621,12 @@ if (isset($_GET['action'])) {
             const el = document.getElementById('notification');
             el.textContent = message;
             el.style.display = 'block';
-            el.className = 'notification ' + (type === 'error' ? 'error' : 'success');
+            el.className = 'notification' + (type === 'error' ? ' error' : '');
+            el.style.borderLeftColor = type === 'success' ? '#10b981' : '#ef4444';
             
             setTimeout(() => {
                 el.style.display = 'none';
-            }, 3500);
+            }, 4000);
         }
 
         function showLoading(show) {
@@ -1664,7 +1639,7 @@ if (isset($_GET['action'])) {
             try {
                 const res = await fetch('./api/log_temp.php', {
                     method: 'POST',
-                    headers: { 'Content-Type: application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     cache: 'no-store',
                     body: JSON.stringify(payload)
                 });
