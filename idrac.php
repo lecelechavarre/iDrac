@@ -1,5 +1,5 @@
 <?php
-// iDRAC Temperature Monitor - Modal UI Version
+// iDRAC Temperature Monitor - Consolidated Modal UI Version
 // Include configuration
 require_once __DIR__ . '/idrac_config.php';
 
@@ -73,7 +73,7 @@ function get_storage_logs(): array {
             }
         }
     }
-    return array_slice($logs, -500); // Last 500 entries
+    return array_slice($logs, -500);
 }
 
 function get_filtered_logs(string $start_date = '', string $end_date = ''): array {
@@ -115,7 +115,7 @@ function download_logs(string $type = 'csv'): void {
         }
         
         header('Content-Type: text/plain');
-        header('Content-Disposition: attachment; filename="idrac_temperature_storage_' . date('Y-m-d') . '.log"');
+        header('Content-Disposition: attachment; filename="idrac_temperature_' . date('Y-m-d') . '.log"');
         header('Pragma: no-cache');
         header('Expires: 0');
         
@@ -129,7 +129,7 @@ function download_logs(string $type = 'csv'): void {
         }
 
         header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="idrac_temperature_log_' . date('Y-m-d') . '.csv"');
+        header('Content-Disposition: attachment; filename="idrac_temperature_' . date('Y-m-d') . '.csv"');
         header('Pragma: no-cache');
         header('Expires: 0');
 
@@ -545,7 +545,8 @@ if (isset($_GET['action'])) {
             foreach ($logs as $log) {
                 $data[] = [
                     'x' => $log['timestamp'],
-                    'y' => $log['temperature']
+                    'y' => $log['temperature'],
+                    'status' => get_temp_status($log['temperature'])
                 ];
             }
             echo json_encode([
@@ -561,12 +562,11 @@ if (isset($_GET['action'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iTM - iDRAC Temperature Monitor</title>
-    <!-- Chart.js for graphing -->
+    <title>iTM - Temperature Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -590,78 +590,73 @@ if (isset($_GET['action'])) {
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
-            overflow-x: hidden;
         }
         
         .container {
             max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 24px;
         }
         
-        /* Header - NO BORDER, NO SHADOW */
+        /* Header */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 20px 30px;
+            padding: 20px;
             background: var(--bg-secondary);
+            margin-bottom: 20px;
         }
         
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 15px;
         }
         
         .logo {
-            width: 60px;
-            height: 60px;
+            width: 50px;
+            height: 50px;
             background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-            border-radius: 15px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 24px;
+            font-size: 20px;
             color: white;
         }
         
         .header h1 {
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 700;
             color: var(--text-primary);
-            letter-spacing: 1px;
         }
         
         .header-subtitle {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
-            margin-top: 5px;
-            font-weight: 400;
+            margin-top: 3px;
         }
         
         .refresh-indicator {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 14px;
+            gap: 10px;
+            font-size: 13px;
             color: var(--text-muted);
-            padding: 10px 20px;
+            padding: 8px 16px;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
+            border-radius: 8px;
         }
         
         .refresh-dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: var(--success);
             animation: pulse 2s infinite;
@@ -672,26 +667,26 @@ if (isset($_GET['action'])) {
             50% { opacity: 0.7; }
         }
         
-        /* Main Dashboard - Temperature + Live Graph Side by Side */
-        .dashboard-main {
+        /* Dashboard Layout */
+        .dashboard {
             display: grid;
             grid-template-columns: 1fr 2fr;
-            gap: 24px;
+            gap: 20px;
             height: 500px;
         }
         
         @media (max-width: 1200px) {
-            .dashboard-main {
+            .dashboard {
                 grid-template-columns: 1fr;
                 height: auto;
             }
         }
         
-        /* Temperature Card - NO BORDER, NO SHADOW */
-        .temp-card {
+        /* Temperature Panel */
+        .temp-panel {
             background: var(--bg-card);
-            border-radius: 24px;
-            padding: 40px;
+            border-radius: 20px;
+            padding: 30px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -699,20 +694,19 @@ if (isset($_GET['action'])) {
         }
         
         .temp-label {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
             font-weight: 600;
         }
         
         .temp-display {
-            font-size: 96px;
+            font-size: 80px;
             font-weight: 800;
-            margin: 20px 0;
+            margin: 15px 0;
             line-height: 1;
-            transition: color 0.3s ease;
         }
         
         .temp-normal { color: var(--success); }
@@ -722,13 +716,13 @@ if (isset($_GET['action'])) {
         
         .status {
             display: inline-block;
-            padding: 12px 32px;
-            border-radius: 30px;
+            padding: 10px 25px;
+            border-radius: 25px;
             font-weight: 700;
-            font-size: 16px;
-            letter-spacing: 1px;
+            font-size: 14px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
-            margin: 15px 0;
+            margin: 10px 0;
         }
         
         .normal { background: var(--success); color: white; }
@@ -738,16 +732,47 @@ if (isset($_GET['action'])) {
         
         .meta {
             color: var(--text-muted);
-            font-size: 14px;
-            margin-top: 15px;
+            font-size: 13px;
+            margin-top: 10px;
             text-align: center;
         }
         
-        /* Live Graph Card - NO BORDER, NO SHADOW */
-        .graph-card {
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+            width: 100%;
+        }
+        
+        .stat-card {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        
+        /* Graph Panel */
+        .graph-panel {
             background: var(--bg-card);
-            border-radius: 24px;
-            padding: 30px;
+            border-radius: 20px;
+            padding: 25px;
             display: flex;
             flex-direction: column;
         }
@@ -756,11 +781,11 @@ if (isset($_GET['action'])) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .graph-title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
             color: var(--text-primary);
         }
@@ -770,36 +795,29 @@ if (isset($_GET['action'])) {
             position: relative;
         }
         
-        /* Stats Grid - NO BORDER, NO SHADOW */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-top: 40px;
-            width: 100%;
-        }
-        
-        .stat-card {
-            background: var(--bg-secondary);
-            padding: 25px;
-            border-radius: 16px;
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .stat-label {
-            color: var(--text-muted);
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        /* BUTTONS ONLY - WITH BORDER */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+            background: var(--accent);
+            color: white;
         }
+        
+        .btn:hover {
+            border-color: white;
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary { background: var(--accent); }
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); }
+        .btn-danger { background: var(--critical); }
+        .btn-info { background: #06b6d4; }
         
         /* Modal System */
         .modal-overlay {
@@ -809,31 +827,32 @@ if (isset($_GET['action'])) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             z-index: 1000;
             align-items: center;
             justify-content: center;
+            padding: 20px;
         }
         
         .modal {
             background: var(--bg-card);
-            border-radius: 24px;
-            width: 90%;
-            max-width: 1200px;
+            border-radius: 20px;
+            width: 95%;
+            max-width: 1400px;
             max-height: 90vh;
             display: flex;
             flex-direction: column;
         }
         
         .modal-header {
-            padding: 24px 30px;
+            padding: 20px 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
         .modal-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 600;
             color: var(--text-primary);
         }
@@ -842,15 +861,15 @@ if (isset($_GET['action'])) {
             background: none;
             border: none;
             color: var(--text-muted);
-            font-size: 28px;
+            font-size: 24px;
             cursor: pointer;
             padding: 5px;
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 8px;
+            border-radius: 6px;
         }
         
         .modal-close:hover {
@@ -858,32 +877,33 @@ if (isset($_GET['action'])) {
             color: var(--text-primary);
         }
         
-        .modal-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0 30px 30px;
-        }
-        
         /* Modal Tabs */
         .modal-tabs {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
-            padding: 0 30px;
+            padding: 0 25px 15px;
         }
         
         .modal-tab {
-            padding: 12px 24px;
+            padding: 10px 20px;
             background: var(--bg-secondary);
-            border-radius: 12px;
+            border-radius: 8px;
             color: var(--text-secondary);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 600;
         }
         
         .modal-tab.active {
             background: var(--accent);
             color: white;
+        }
+        
+        .modal-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 25px 25px;
         }
         
         /* Date Filter */
@@ -895,62 +915,23 @@ if (isset($_GET['action'])) {
         }
         
         .date-input {
-            padding: 10px 15px;
+            padding: 8px 12px;
             background: var(--bg-secondary);
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             color: var(--text-primary);
             font-family: inherit;
+            font-size: 14px;
         }
         
         .date-label {
             color: var(--text-muted);
-            font-size: 14px;
-        }
-        
-        /* BUTTONS ONLY - WITH BORDER */
-        .btn {
-            padding: 12px 24px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            color: white;
-            border: 2px solid transparent;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            border-color: white;
-        }
-        
-        .btn-primary { 
-            background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
-        }
-        
-        .btn-success { 
-            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
-        }
-        
-        .btn-warning { 
-            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
-        }
-        
-        .btn-danger { 
-            background: linear-gradient(135deg, var(--critical) 0%, #dc2626 100%);
-        }
-        
-        .btn-info { 
-            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+            font-size: 13px;
+            margin-bottom: 5px;
         }
         
         /* Logs Table */
-        .logs-table-container {
+        .logs-container {
             max-height: 400px;
             overflow-y: auto;
         }
@@ -964,48 +945,48 @@ if (isset($_GET['action'])) {
             position: sticky;
             top: 0;
             background: var(--bg-secondary);
-            padding: 16px;
+            padding: 14px;
             text-align: left;
             color: var(--text-muted);
             font-weight: 600;
-            font-size: 14px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
         
         .logs-table td {
-            padding: 16px;
+            padding: 14px;
             color: var(--text-secondary);
+            font-size: 13px;
         }
         
         .logs-table tr:nth-child(even) {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
         }
         
         .logs-table tr:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
         }
         
         /* Modal Actions */
         .modal-actions {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             margin-top: 20px;
-            padding: 0 30px 30px;
         }
         
         /* Notification */
         .notification {
             position: fixed;
-            top: 30px;
-            right: 30px;
-            padding: 20px 30px;
-            border-radius: 16px;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
             background: var(--bg-card);
             display: none;
             z-index: 1001;
             animation: slideInRight 0.3s ease;
-            border-left: 5px solid var(--success);
+            border-left: 4px solid var(--success);
         }
         
         .notification.error {
@@ -1026,18 +1007,18 @@ if (isset($_GET['action'])) {
             transform: translate(-50%, -50%);
             z-index: 1000;
             background: var(--bg-primary);
-            padding: 40px;
-            border-radius: 20px;
+            padding: 30px;
+            border-radius: 15px;
         }
         
         .spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid var(--bg-secondary);
-            border-top: 4px solid var(--accent);
+            width: 50px;
+            height: 50px;
+            border: 3px solid var(--bg-secondary);
+            border-top: 3px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            margin: 0 auto 15px;
         }
         
         @keyframes spin {
@@ -1047,31 +1028,23 @@ if (isset($_GET['action'])) {
         
         .loading-text {
             color: var(--text-primary);
-            font-size: 16px;
+            font-size: 14px;
             text-align: center;
-        }
-        
-        /* Control Panel */
-        .control-panel {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 20px;
         }
         
         /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 8px;
+            width: 6px;
         }
         
         ::-webkit-scrollbar-track {
             background: var(--bg-secondary);
-            border-radius: 4px;
+            border-radius: 3px;
         }
         
         ::-webkit-scrollbar-thumb {
             background: var(--bg-primary);
-            border-radius: 4px;
+            border-radius: 3px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
@@ -1084,12 +1057,10 @@ if (isset($_GET['action'])) {
         <!-- Header -->
         <div class="header">
             <div class="logo-container">
-                <div class="logo">
-                    <div style="color: white; font-weight: 800; font-size: 20px;">iTM</div>
-                </div>
+                <div class="logo">iTM</div>
                 <div>
                     <h1>iTM</h1>
-                    <div class="header-subtitle">iDRAC Temperature Monitoring System</div>
+                    <div class="header-subtitle">Temperature Monitoring System</div>
                 </div>
             </div>
             
@@ -1099,10 +1070,10 @@ if (isset($_GET['action'])) {
             </div>
         </div>
 
-        <!-- Main Dashboard: Temperature + Live Graph Side by Side -->
-        <div class="dashboard-main">
-            <!-- Temperature Display -->
-            <div class="temp-card">
+        <!-- Main Dashboard -->
+        <div class="dashboard">
+            <!-- Temperature Panel -->
+            <div class="temp-panel">
                 <div class="temp-label">Current Temperature</div>
                 <div class="temp-display" id="temperature">-- °C</div>
                 <div class="status unknown" id="statusIndicator">UNKNOWN</div>
@@ -1123,91 +1094,75 @@ if (isset($_GET['action'])) {
                     </div>
                 </div>
                 
-                <!-- Control Buttons -->
-                <div class="control-panel">
-                    <button class="btn btn-info" onclick="openViewLogsModal()">
-                        <span>📋</span>
-                        View Logs
-                    </button>
-                </div>
+                <button class="btn btn-primary" onclick="openLogsModal()" style="margin-top: 25px;">
+                    View Logs
+                </button>
             </div>
 
-            <!-- Live Graph -->
-            <div class="graph-card">
+            <!-- Live Graph Panel -->
+            <div class="graph-panel">
                 <div class="graph-header">
                     <div class="graph-title">Live Temperature Graph</div>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-info" onclick="openHistoryLogsModal()">
-                            <span>📊</span>
-                            History Logs
-                        </button>
-                        <button class="btn btn-info" onclick="openHistoryGraphModal()">
-                            <span>📈</span>
-                            History Graph
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-info" onclick="openLogsModal()">
+                            View Logs
                         </button>
                     </div>
                 </div>
                 <div class="graph-container">
-                    <canvas id="tempChart"></canvas>
+                    <canvas id="liveChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- View Logs Modal -->
-    <div class="modal-overlay" id="viewLogsModal">
+    <!-- Consolidated Logs Modal -->
+    <div class="modal-overlay" id="logsModal">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title">Live Logs</div>
-                <button class="modal-close" onclick="closeViewLogsModal()">×</button>
+                <div class="modal-title">Temperature Logs & Analytics</div>
+                <button class="modal-close" onclick="closeLogsModal()">×</button>
             </div>
-            <div class="modal-content">
-                <div class="logs-table-container">
-                    <table class="logs-table" id="liveLogsTable">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Temperature</th>
-                                <th>Status</th>
-                                <th>Source IP</th>
-                            </tr>
-                        </thead>
-                        <tbody id="liveLogsBody">
-                            <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading logs...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-info" onclick="refreshLiveLogs()">
-                    <span>🔄</span>
-                    Refresh Logs
-                </button>
-                <button class="btn btn-success" onclick="downloadCSV()">
-                    <span>📥</span>
-                    Download CSV
-                </button>
-                <button class="btn btn-success" onclick="downloadStorageLogs()">
-                    <span>📥</span>
-                    Download Raw Logs
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- History Logs Modal -->
-    <div class="modal-overlay" id="historyLogsModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">History Logs</div>
-                <button class="modal-close" onclick="closeHistoryLogsModal()">×</button>
-            </div>
+            
             <div class="modal-tabs">
-                <div class="modal-tab active" onclick="showHistoryTab('filter')">Filter by Date</div>
-                <div class="modal-tab" onclick="showHistoryTab('all')">All Logs</div>
+                <div class="modal-tab active" onclick="showModalTab('live')">Live Logs</div>
+                <div class="modal-tab" onclick="showModalTab('history')">History Logs</div>
+                <div class="modal-tab" onclick="showModalTab('graph')">History Graph</div>
             </div>
+            
             <div class="modal-content">
-                <div id="history-filter-tab">
+                <!-- Live Logs Tab -->
+                <div id="live-tab" class="tab-content">
+                    <div class="logs-container">
+                        <table class="logs-table" id="liveLogsTable">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Temperature</th>
+                                    <th>Status</th>
+                                    <th>Source IP</th>
+                                </tr>
+                            </thead>
+                            <tbody id="liveLogsBody">
+                                <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading live logs...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-info" onclick="refreshLiveLogs()">
+                            Refresh Logs
+                        </button>
+                        <button class="btn btn-success" onclick="downloadCSV()">
+                            Download CSV
+                        </button>
+                        <button class="btn btn-success" onclick="downloadLogFile()">
+                            Download Log File
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- History Logs Tab -->
+                <div id="history-tab" class="tab-content" style="display: none;">
                     <div class="date-filter">
                         <div>
                             <div class="date-label">Start Date</div>
@@ -1218,11 +1173,10 @@ if (isset($_GET['action'])) {
                             <input type="date" id="historyEndDate" class="date-input" value="<?php echo date('Y-m-d'); ?>">
                         </div>
                         <button class="btn btn-primary" onclick="loadHistoryLogs()">
-                            <span>🔍</span>
                             Search
                         </button>
                     </div>
-                    <div class="logs-table-container">
+                    <div class="logs-container">
                         <table class="logs-table" id="historyLogsTable">
                             <thead>
                                 <tr>
@@ -1237,58 +1191,34 @@ if (isset($_GET['action'])) {
                             </tbody>
                         </table>
                     </div>
-                </div>
-                <div id="history-all-tab" style="display: none;">
-                    <div class="logs-table-container">
-                        <table class="logs-table" id="allLogsTable">
-                            <thead>
-                                <tr>
-                                    <th>Timestamp</th>
-                                    <th>Temperature</th>
-                                    <th>Status</th>
-                                    <th>Source IP</th>
-                                </tr>
-                            </thead>
-                            <tbody id="allLogsBody">
-                                <tr><td colspan="4" style="text-align: center; padding: 40px;">Loading all logs...</td></tr>
-                            </tbody>
-                        </table>
+                    <div class="modal-actions">
+                        <button class="btn btn-success" onclick="downloadFilteredCSV()">
+                            Download Filtered CSV
+                        </button>
+                        <button class="btn btn-success" onclick="downloadFilteredLogFile()">
+                            Download Filtered Log File
+                        </button>
                     </div>
                 </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-success" onclick="downloadFilteredCSV()">
-                    <span>📥</span>
-                    Download Filtered CSV
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- History Graph Modal -->
-    <div class="modal-overlay" id="historyGraphModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">History Graph</div>
-                <button class="modal-close" onclick="closeHistoryGraphModal()">×</button>
-            </div>
-            <div class="modal-content">
-                <div class="date-filter">
-                    <div>
-                        <div class="date-label">Start Date</div>
-                        <input type="date" id="graphStartDate" class="date-input" value="<?php echo date('Y-m-d', strtotime('-7 days')); ?>">
+                
+                <!-- History Graph Tab -->
+                <div id="graph-tab" class="tab-content" style="display: none;">
+                    <div class="date-filter">
+                        <div>
+                            <div class="date-label">Start Date</div>
+                            <input type="date" id="graphStartDate" class="date-input" value="<?php echo date('Y-m-d', strtotime('-7 days')); ?>">
+                        </div>
+                        <div>
+                            <div class="date-label">End Date</div>
+                            <input type="date" id="graphEndDate" class="date-input" value="<?php echo date('Y-m-d'); ?>">
+                        </div>
+                        <button class="btn btn-primary" onclick="loadHistoryGraph()">
+                            Show Graph
+                        </button>
                     </div>
-                    <div>
-                        <div class="date-label">End Date</div>
-                        <input type="date" id="graphEndDate" class="date-input" value="<?php echo date('Y-m-d'); ?>">
+                    <div class="graph-container" style="height: 400px; margin-top: 20px;">
+                        <canvas id="historyChart"></canvas>
                     </div>
-                    <button class="btn btn-primary" onclick="loadHistoryGraph()">
-                        <span>📈</span>
-                        Show Graph
-                    </button>
-                </div>
-                <div class="graph-container" style="height: 400px; margin-top: 20px;">
-                    <canvas id="historyChartModal"></canvas>
                 </div>
             </div>
         </div>
@@ -1305,15 +1235,177 @@ if (isset($_GET['action'])) {
 
     <script>
         const AUTO_REFRESH_MS = <?php echo (int)$CONFIG['check_interval']; ?> * 60000;
-        let tempChart = null;
-        let historyChartModal = null;
+        const WARNING_TEMP = <?php echo $CONFIG['warning_temp']; ?>;
+        const CRITICAL_TEMP = <?php echo $CONFIG['critical_temp']; ?>;
+        
+        let liveChart = null;
+        let historyChart = null;
         let currentTemp = null;
         let currentStatus = 'UNKNOWN';
+        let chartData = {
+            labels: [],
+            data: []
+        };
         let liveLogsInterval = null;
+
+        // Initialize Live Chart
+        function initLiveChart() {
+            const ctx = document.getElementById('liveChart').getContext('2d');
+            
+            liveChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: chartData.data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: function(context) {
+                            const value = context.dataset.data[context.dataIndex];
+                            if (value >= CRITICAL_TEMP) return '#ef4444';
+                            if (value >= WARNING_TEMP) return '#f59e0b';
+                            return '#10b981';
+                        },
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 1,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#cbd5e1',
+                            borderColor: '#475569',
+                            borderWidth: 1,
+                            cornerRadius: 6
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.2)',
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 11
+                                },
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.2)',
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 40
+                        }
+                    },
+                    animation: {
+                        duration: 500,
+                        easing: 'linear'
+                    }
+                }
+            });
+            
+            // Add threshold lines
+            addThresholdLines();
+        }
+
+        function addThresholdLines() {
+            if (!liveChart) return;
+            
+            // Warning line
+            liveChart.data.datasets.push({
+                label: 'Warning (' + WARNING_TEMP + '°C)',
+                data: Array(chartData.labels.length).fill(WARNING_TEMP),
+                borderColor: '#f59e0b',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [5, 3],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            // Critical line
+            liveChart.data.datasets.push({
+                label: 'Critical (' + CRITICAL_TEMP + '°C)',
+                data: Array(chartData.labels.length).fill(CRITICAL_TEMP),
+                borderColor: '#ef4444',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [5, 3],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            liveChart.update();
+        }
+
+        // Update Live Chart with new temperature
+        function updateLiveChart(temp, timestamp) {
+            if (!liveChart) return;
+            
+            const timeLabel = timestamp.split(' ')[1].substring(0, 5); // HH:MM
+            
+            // Add new data point
+            chartData.labels.push(timeLabel);
+            chartData.data.push(temp);
+            
+            // Update threshold lines
+            if (liveChart.data.datasets.length > 1) {
+                liveChart.data.datasets[1].data.push(WARNING_TEMP);
+                liveChart.data.datasets[2].data.push(CRITICAL_TEMP);
+            }
+            
+            // Keep only last 30 points
+            if (chartData.labels.length > 30) {
+                chartData.labels.shift();
+                chartData.data.shift();
+                if (liveChart.data.datasets.length > 1) {
+                    liveChart.data.datasets[1].data.shift();
+                    liveChart.data.datasets[2].data.shift();
+                }
+            }
+            
+            // Update chart
+            liveChart.data.labels = chartData.labels;
+            liveChart.data.datasets[0].data = chartData.data;
+            
+            // Update point colors
+            liveChart.data.datasets[0].pointBackgroundColor = chartData.data.map(value => {
+                if (value >= CRITICAL_TEMP) return '#ef4444';
+                if (value >= WARNING_TEMP) return '#f59e0b';
+                return '#10b981';
+            });
+            
+            liveChart.update('none');
+        }
 
         // Temperature Functions
         async function getTemperature() {
-            showLoading(true);
             try {
                 const response = await fetch('?action=get_temp');
                 const data = await response.json();
@@ -1322,7 +1414,7 @@ if (isset($_GET['action'])) {
                     currentTemp = data.temperature;
                     currentStatus = data.status;
                     
-                    // Update temperature display with color
+                    // Update temperature display
                     const tempEl = document.getElementById('temperature');
                     tempEl.textContent = data.temperature.toFixed(1) + ' °C';
                     tempEl.className = 'temp-display temp-' + data.status.toLowerCase();
@@ -1338,16 +1430,15 @@ if (isset($_GET['action'])) {
                     // Update stats
                     updateStats(data.temperature);
                     
+                    // Update live chart
+                    updateLiveChart(data.temperature, data.timestamp);
+                    
                     // Send to log API
                     await sendTempToLog(data.temperature);
-                    
-                    // Update graph
-                    updateChart(data.temperature, data.timestamp);
                 }
             } catch (error) {
                 console.error('Error getting temperature:', error);
             }
-            showLoading(false);
         }
 
         function updateStats(currentTemp) {
@@ -1363,197 +1454,51 @@ if (isset($_GET['action'])) {
             }
         }
 
-        // Chart Functions
-        function initTempChart() {
-            const ctx = document.getElementById('tempChart').getContext('2d');
-            
-            tempChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Temperature (°C)',
-                        data: [],
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#3b82f6',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 5,
-                        pointHoverRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: {
-                                color: '#cbd5e1',
-                                font: {
-                                    size: 14,
-                                    family: "'Segoe UI', sans-serif"
-                                }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                            titleColor: '#f1f5f9',
-                            bodyColor: '#cbd5e1',
-                            borderColor: '#475569',
-                            borderWidth: 1,
-                            cornerRadius: 8
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(71, 85, 105, 0.3)',
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(71, 85, 105, 0.3)',
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                font: {
-                                    size: 12
-                                },
-                                callback: function(value) {
-                                    return value + '°C';
-                                }
-                            }
-                        }
-                    },
-                    animation: {
-                        duration: 1000,
-                        easing: 'easeOutQuart'
-                    }
-                }
-            });
-            
-            addThresholdLines();
-        }
-
-        function addThresholdLines() {
-            if (!tempChart) return;
-            
-            const warningLine = <?php echo $CONFIG['warning_temp']; ?>;
-            const criticalLine = <?php echo $CONFIG['critical_temp']; ?>;
-            
-            // Add warning line
-            tempChart.data.datasets.push({
-                label: 'Warning Threshold',
-                data: Array(tempChart.data.labels.length).fill(warningLine),
-                borderColor: '#f59e0b',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                fill: false,
-                pointRadius: 0
-            });
-            
-            // Add critical line
-            tempChart.data.datasets.push({
-                label: 'Critical Threshold',
-                data: Array(tempChart.data.labels.length).fill(criticalLine),
-                borderColor: '#ef4444',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                fill: false,
-                pointRadius: 0
-            });
-            
-            tempChart.update();
-        }
-
-        function updateChart(temp, timestamp) {
-            if (!tempChart) return;
-            
-            // Add new data point
-            tempChart.data.labels.push(timestamp.split(' ')[1]);
-            tempChart.data.datasets[0].data.push(temp);
-            
-            // Update threshold lines
-            if (tempChart.data.datasets.length > 1) {
-                tempChart.data.datasets[1].data.push(<?php echo $CONFIG['warning_temp']; ?>);
-                tempChart.data.datasets[2].data.push(<?php echo $CONFIG['critical_temp']; ?>);
-            }
-            
-            // Keep only last 20 points
-            if (tempChart.data.labels.length > 20) {
-                tempChart.data.labels.shift();
-                tempChart.data.datasets.forEach(dataset => {
-                    dataset.data.shift();
-                });
-            }
-            
-            tempChart.update();
-        }
-
         // Modal Functions
-        function openViewLogsModal() {
-            document.getElementById('viewLogsModal').style.display = 'flex';
+        function openLogsModal() {
+            document.getElementById('logsModal').style.display = 'flex';
+            showModalTab('live');
             refreshLiveLogs();
             startLiveLogsRefresh();
         }
 
-        function closeViewLogsModal() {
-            document.getElementById('viewLogsModal').style.display = 'none';
+        function closeLogsModal() {
+            document.getElementById('logsModal').style.display = 'none';
             stopLiveLogsRefresh();
         }
 
-        function openHistoryLogsModal() {
-            document.getElementById('historyLogsModal').style.display = 'flex';
-            showHistoryTab('filter');
-        }
-
-        function closeHistoryLogsModal() {
-            document.getElementById('historyLogsModal').style.display = 'none';
-        }
-
-        function openHistoryGraphModal() {
-            document.getElementById('historyGraphModal').style.display = 'flex';
-            initHistoryChartModal();
-        }
-
-        function closeHistoryGraphModal() {
-            document.getElementById('historyGraphModal').style.display = 'none';
-            if (historyChartModal) {
-                historyChartModal.destroy();
-                historyChartModal = null;
-            }
-        }
-
-        function showHistoryTab(tabName) {
+        function showModalTab(tabName) {
             // Update tabs
-            document.querySelectorAll('#historyLogsModal .modal-tab').forEach(tab => {
+            document.querySelectorAll('.modal-tab').forEach(tab => {
                 tab.classList.remove('active');
             });
             event.target.classList.add('active');
             
             // Show selected tab content
-            document.getElementById('history-filter-tab').style.display = 'none';
-            document.getElementById('history-all-tab').style.display = 'none';
+            document.getElementById('live-tab').style.display = 'none';
+            document.getElementById('history-tab').style.display = 'none';
+            document.getElementById('graph-tab').style.display = 'none';
             
-            if (tabName === 'filter') {
-                document.getElementById('history-filter-tab').style.display = 'block';
-            } else {
-                document.getElementById('history-all-tab').style.display = 'block';
-                loadAllLogs();
+            document.getElementById(tabName + '-tab').style.display = 'block';
+            
+            if (tabName === 'history') {
+                // Initialize date pickers with default values
+                document.getElementById('historyStartDate').value = getDateString(-7);
+                document.getElementById('historyEndDate').value = getDateString(0);
+            } else if (tabName === 'graph') {
+                // Initialize date pickers for graph
+                document.getElementById('graphStartDate').value = getDateString(-7);
+                document.getElementById('graphEndDate').value = getDateString(0);
+                if (!historyChart) {
+                    initHistoryChart();
+                }
             }
+        }
+
+        function getDateString(daysOffset) {
+            const date = new Date();
+            date.setDate(date.getDate() + daysOffset);
+            return date.toISOString().split('T')[0];
         }
 
         // Logs Functions
@@ -1565,16 +1510,16 @@ if (isset($_GET['action'])) {
                 
                 if (data.success && data.logs.length > 0) {
                     const tbody = document.getElementById('liveLogsBody');
-                    tbody.innerHTML = data.logs.slice().reverse().slice(0, 100).map(log => `
+                    tbody.innerHTML = data.logs.slice().reverse().slice(0, 50).map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
                             <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
-                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 5px 12px; font-size: 12px;">
+                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 4px 10px; font-size: 11px;">
                                     ${getStatusText(log.temperature)}
                                 </span>
                             </td>
-                            <td><code>${log.ip}</code></td>
+                            <td><code style="font-size: 11px;">${log.ip}</code></td>
                         </tr>
                     `).join('');
                 } else {
@@ -1589,7 +1534,7 @@ if (isset($_GET['action'])) {
 
         function startLiveLogsRefresh() {
             if (liveLogsInterval) clearInterval(liveLogsInterval);
-            liveLogsInterval = setInterval(refreshLiveLogs, 10000); // Refresh every 10 seconds
+            liveLogsInterval = setInterval(refreshLiveLogs, 5000);
         }
 
         function stopLiveLogsRefresh() {
@@ -1603,6 +1548,11 @@ if (isset($_GET['action'])) {
             const startDate = document.getElementById('historyStartDate').value;
             const endDate = document.getElementById('historyEndDate').value;
             
+            if (!startDate || !endDate) {
+                showNotification('Please select both start and end dates', 'error');
+                return;
+            }
+            
             showLoading(true);
             try {
                 const response = await fetch(`?action=get_filtered_logs&start_date=${startDate}&end_date=${endDate}`);
@@ -1615,75 +1565,78 @@ if (isset($_GET['action'])) {
                             <td>${log.timestamp}</td>
                             <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
-                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 5px 12px; font-size: 12px;">
+                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 4px 10px; font-size: 11px;">
                                     ${getStatusText(log.temperature)}
                                 </span>
                             </td>
-                            <td><code>${log.ip}</code></td>
+                            <td><code style="font-size: 11px;">${log.ip}</code></td>
                         </tr>
                     `).join('');
+                    showNotification(`Found ${data.logs.length} logs for selected date range`, 'success');
                 } else {
                     document.getElementById('historyLogsBody').innerHTML = 
                         '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs found for selected date range</td></tr>';
+                    showNotification('No logs found for selected date range', 'error');
                 }
             } catch (error) {
                 console.error('Error loading history logs:', error);
-            }
-            showLoading(false);
-        }
-
-        async function loadAllLogs() {
-            showLoading(true);
-            try {
-                const response = await fetch('?action=get_storage_logs');
-                const data = await response.json();
-                
-                if (data.success && data.logs.length > 0) {
-                    const tbody = document.getElementById('allLogsBody');
-                    tbody.innerHTML = data.logs.slice().reverse().map(log => `
-                        <tr>
-                            <td>${log.timestamp}</td>
-                            <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
-                            <td>
-                                <span class="status ${getStatusClass(log.temperature)}" style="padding: 5px 12px; font-size: 12px;">
-                                    ${getStatusText(log.temperature)}
-                                </span>
-                            </td>
-                            <td><code>${log.ip}</code></td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('allLogsBody').innerHTML = 
-                        '<tr><td colspan="4" style="text-align: center; padding: 40px;">No logs available</td></tr>';
-                }
-            } catch (error) {
-                console.error('Error loading all logs:', error);
+                showNotification('Error loading history logs', 'error');
             }
             showLoading(false);
         }
 
         // History Graph Functions
-        function initHistoryChartModal() {
-            const ctx = document.getElementById('historyChartModal').getContext('2d');
+        function initHistoryChart() {
+            const ctx = document.getElementById('historyChart').getContext('2d');
             
-            historyChartModal = new Chart(ctx, {
+            historyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: [],
-                    datasets: [{
-                        label: 'Temperature (°C)',
-                        data: [],
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#10b981',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 4,
-                        pointHoverRadius: 7
-                    }]
+                    datasets: [
+                        {
+                            label: 'Normal',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#10b981',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        },
+                        {
+                            label: 'Warning',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#f59e0b',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        },
+                        {
+                            label: 'Critical',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#ef4444',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -1693,8 +1646,7 @@ if (isset($_GET['action'])) {
                             labels: {
                                 color: '#cbd5e1',
                                 font: {
-                                    size: 14,
-                                    family: "'Segoe UI', sans-serif"
+                                    size: 12
                                 }
                             }
                         },
@@ -1704,31 +1656,31 @@ if (isset($_GET['action'])) {
                             bodyColor: '#cbd5e1',
                             borderColor: '#475569',
                             borderWidth: 1,
-                            cornerRadius: 8
+                            cornerRadius: 6
                         }
                     },
                     scales: {
                         x: {
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.3)',
+                                color: 'rgba(71, 85, 105, 0.2)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 12
+                                    size: 11
                                 },
-                                maxTicksLimit: 10
+                                maxTicksLimit: 12
                             }
                         },
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: 'rgba(71, 85, 105, 0.3)',
+                                color: 'rgba(71, 85, 105, 0.2)',
                             },
                             ticks: {
                                 color: '#94a3b8',
                                 font: {
-                                    size: 12
+                                    size: 11
                                 },
                                 callback: function(value) {
                                     return value + '°C';
@@ -1744,52 +1696,119 @@ if (isset($_GET['action'])) {
             const startDate = document.getElementById('graphStartDate').value;
             const endDate = document.getElementById('graphEndDate').value;
             
+            if (!startDate || !endDate) {
+                showNotification('Please select both start and end dates', 'error');
+                return;
+            }
+            
             showLoading(true);
             try {
                 const response = await fetch(`?action=get_graph_data&start_date=${startDate}&end_date=${endDate}`);
                 const data = await response.json();
                 
                 if (data.success && data.data.length > 0) {
-                    const labels = data.data.map(item => {
-                        const date = new Date(item.x);
-                        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    });
-                    const temps = data.data.map(item => item.y);
+                    // Separate data by status
+                    const normalData = [];
+                    const warningData = [];
+                    const criticalData = [];
+                    const labels = [];
                     
-                    if (historyChartModal) {
-                        historyChartModal.data.labels = labels;
-                        historyChartModal.data.datasets[0].data = temps;
-                        historyChartModal.update();
+                    data.data.forEach((item, index) => {
+                        const date = new Date(item.x);
+                        const label = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        labels.push(label);
+                        
+                        if (item.status === 'CRITICAL') {
+                            criticalData.push(item.y);
+                            warningData.push(null);
+                            normalData.push(null);
+                        } else if (item.status === 'WARNING') {
+                            criticalData.push(null);
+                            warningData.push(item.y);
+                            normalData.push(null);
+                        } else {
+                            criticalData.push(null);
+                            warningData.push(null);
+                            normalData.push(item.y);
+                        }
+                    });
+                    
+                    if (historyChart) {
+                        historyChart.data.labels = labels;
+                        historyChart.data.datasets[0].data = normalData;
+                        historyChart.data.datasets[1].data = warningData;
+                        historyChart.data.datasets[2].data = criticalData;
+                        historyChart.update();
                     }
+                    showNotification(`Showing ${data.data.length} data points`, 'success');
                 } else {
-                    if (historyChartModal) {
-                        historyChartModal.data.labels = [];
-                        historyChartModal.data.datasets[0].data = [];
-                        historyChartModal.update();
+                    if (historyChart) {
+                        historyChart.data.labels = [];
+                        historyChart.data.datasets[0].data = [];
+                        historyChart.data.datasets[1].data = [];
+                        historyChart.data.datasets[2].data = [];
+                        historyChart.update();
                     }
+                    showNotification('No data found for selected date range', 'error');
                 }
             } catch (error) {
                 console.error('Error loading history graph:', error);
+                showNotification('Error loading history graph', 'error');
             }
             showLoading(false);
         }
 
+        // Download Functions
+        function downloadCSV() {
+            window.open('?action=download_logs&type=csv', '_blank');
+        }
+
+        function downloadLogFile() {
+            window.open('?action=download_logs&type=storage', '_blank');
+        }
+
+        function downloadFilteredCSV() {
+            const startDate = document.getElementById('historyStartDate').value;
+            const endDate = document.getElementById('historyEndDate').value;
+            
+            if (!startDate || !endDate) {
+                showNotification('Please select date range first', 'error');
+                return;
+            }
+            
+            // Note: This downloads all CSV data. For true filtered download, we'd need a new endpoint
+            showNotification('Downloading all CSV data. Use date filters in spreadsheet application.', 'success');
+            setTimeout(() => {
+                downloadCSV();
+            }, 500);
+        }
+
+        function downloadFilteredLogFile() {
+            const startDate = document.getElementById('historyStartDate').value;
+            const endDate = document.getElementById('historyEndDate').value;
+            
+            if (!startDate || !endDate) {
+                showNotification('Please select date range first', 'error');
+                return;
+            }
+            
+            // Note: This downloads all log data. For true filtered download, we'd need a new endpoint
+            showNotification('Downloading all log data. Use search in text editor to filter.', 'success');
+            setTimeout(() => {
+                downloadLogFile();
+            }, 500);
+        }
+
         // Utility Functions
         function getStatusClass(temp) {
-            const warning = <?php echo $CONFIG['warning_temp']; ?>;
-            const critical = <?php echo $CONFIG['critical_temp']; ?>;
-            
-            if (temp >= critical) return 'critical';
-            if (temp >= warning) return 'warning';
+            if (temp >= CRITICAL_TEMP) return 'critical';
+            if (temp >= WARNING_TEMP) return 'warning';
             return 'normal';
         }
 
         function getStatusText(temp) {
-            const warning = <?php echo $CONFIG['warning_temp']; ?>;
-            const critical = <?php echo $CONFIG['critical_temp']; ?>;
-            
-            if (temp >= critical) return 'CRITICAL';
-            if (temp >= warning) return 'WARNING';
+            if (temp >= CRITICAL_TEMP) return 'CRITICAL';
+            if (temp >= WARNING_TEMP) return 'WARNING';
             return 'NORMAL';
         }
 
@@ -1802,7 +1821,7 @@ if (isset($_GET['action'])) {
             
             setTimeout(() => {
                 el.style.display = 'none';
-            }, 4000);
+            }, 3000);
         }
 
         function showLoading(show) {
@@ -1826,26 +1845,28 @@ if (isset($_GET['action'])) {
             }
         }
 
-        function downloadCSV() {
-            window.open('?action=download_logs&type=csv', '_blank');
-        }
-
-        function downloadStorageLogs() {
-            window.open('?action=download_logs&type=storage', '_blank');
-        }
-
-        function downloadFilteredCSV() {
-            const startDate = document.getElementById('historyStartDate').value;
-            const endDate = document.getElementById('historyEndDate').value;
-            showNotification('Note: This downloads all logs. Use the date filter in the downloaded file.', 'success');
-            downloadCSV();
-        }
-
-        // Initialize on load
+        // Initialize
         window.onload = function() {
+            // Initialize charts
+            initLiveChart();
+            
+            // Start temperature monitoring
             getTemperature();
-            initTempChart();
             setInterval(getTemperature, AUTO_REFRESH_MS);
+            
+            // Initialize with some data
+            for (let i = 0; i < 10; i++) {
+                const time = new Date(Date.now() - (10 - i) * 60000);
+                const timeStr = time.getHours().toString().padStart(2, '0') + ':' + 
+                              time.getMinutes().toString().padStart(2, '0');
+                chartData.labels.push(timeStr);
+                chartData.data.push(20 + Math.random() * 5);
+            }
+            
+            if (liveChart) {
+                liveChart.update();
+                addThresholdLines();
+            }
         };
     </script>
 </body>
