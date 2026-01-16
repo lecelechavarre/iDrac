@@ -43,7 +43,7 @@ function log_temperature(float $temp, string $status): void {
 function get_logs(): array {
     $logs = [];
     if (file_exists(LOG_FILE)) {
-        $lines = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file(LOG_FILE, FILE_IGNORE_NEWLINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             $parts = explode(',', $line);
             if (count($parts) === 3) {
@@ -61,7 +61,7 @@ function get_logs(): array {
 function get_storage_logs(): array {
     $logs = [];
     if (file_exists(STORAGE_LOG_FILE)) {
-        $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file(STORAGE_LOG_FILE, FILE_IGNORE_NEWLINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             if (preg_match('/\[([^\]]+)\]\s*temp=([\d\.]+).*?ip=([\d\.]+)/', $line, $matches)) {
                 $logs[] = [
@@ -891,13 +891,7 @@ if (isset($_GET['action'])) {
             border: 2px solid transparent;
             background: var(--accent);
             color: white;
-            white-space: normal; /* CHANGED: Allow text wrapping */
-            word-break: break-word; /* CHANGED: Allow word breaking */
-            min-height: 36px; /* CHANGED: Minimum height for better visibility */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
+            white-space: nowrap;
         }
         
         .btn:hover {
@@ -1111,42 +1105,42 @@ if (isset($_GET['action'])) {
             background: rgba(255, 255, 255, 0.08);
         }
         
-        /* =============== MODAL ACTIONS - IMPROVED RESPONSIVENESS =============== */
+        /* =============== MODAL ACTIONS - FIXED VISIBILITY =============== */
         .modal-actions {
             display: flex;
             gap: 8px;
             margin-top: 15px;
             flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-start;
+            width: 100%;
         }
         
-        /* CHANGED: Better button text handling for modal actions */
         .modal-actions .btn {
-            flex: 1;
+            flex: 1 1 auto;
             min-width: 120px;
-            font-size: 11px;
-            padding: 8px 10px;
             text-align: center;
-            justify-content: center;
+            font-size: 11px;
+            padding: 10px 12px;
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.2;
         }
         
-        @media (max-width: 480px) {
-            .modal-actions {
-                gap: 6px;
-            }
-            
+        @media (min-width: 480px) {
             .modal-actions .btn {
-                min-width: 100px;
-                font-size: 10px;
-                padding: 6px 8px;
+                flex: none;
+                min-width: 140px;
+                font-size: 12px;
+                padding: 10px 16px;
+                white-space: nowrap;
             }
         }
         
         @media (min-width: 768px) {
             .modal-actions .btn {
-                flex: none;
                 min-width: 160px;
-                font-size: 12px;
-                padding: 8px 12px;
+                font-size: 13px;
             }
         }
         
@@ -1263,14 +1257,14 @@ if (isset($_GET['action'])) {
                 max-height: 85vh;
             }
             
-            /* CHANGED: Better modal actions for mobile */
             .modal-actions {
-                flex-direction: column;
+                justify-content: center;
             }
             
             .modal-actions .btn {
-                width: 100%;
-                margin-bottom: 5px;
+                min-width: 100px;
+                font-size: 10px;
+                padding: 8px 10px;
             }
         }
         
@@ -1290,6 +1284,12 @@ if (isset($_GET['action'])) {
             .status {
                 padding: 10px 20px;
                 font-size: 13px;
+            }
+            
+            .modal-actions .btn {
+                min-width: 90px;
+                font-size: 9px;
+                padding: 6px 8px;
             }
         }
         
@@ -1491,7 +1491,7 @@ if (isset($_GET['action'])) {
 
     <script>
         // =============== ENHANCED GRAPH CONFIGURATION ===============
-        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes
+        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes (CHANGED AS REQUESTED)
         const WARNING_TEMP = <?php echo $CONFIG['warning_temp']; ?>;
         const CRITICAL_TEMP = <?php echo $CONFIG['critical_temp']; ?>;
         
@@ -1559,14 +1559,15 @@ if (isset($_GET['action'])) {
                             borderWidth: 1,
                             cornerRadius: 8,
                             padding: 12,
+                            // SIMPLIFIED TOOLTIP - ONLY SHOW TEMPERATURE IN WHOLE NUMBER
                             callbacks: {
-                                // FIXED: Show only whole number temperature, no warning text
                                 label: function(context) {
                                     const value = context.parsed.y;
-                                    // Round to whole number and add °C
-                                    return Math.round(value) + '°C';
+                                    // Round to whole number and show only temperature
+                                    return `${Math.round(value)}°C`;
                                 },
-                                // REMOVED: afterLabel callback that showed warning text
+                                // REMOVED afterLabel callback completely to remove status/warning text
+                                afterLabel: null
                             }
                         }
                     },
@@ -1599,7 +1600,7 @@ if (isset($_GET['action'])) {
                                     weight: '500'
                                 },
                                 callback: function(value) {
-                                    return Math.round(value) + '°C'; // Show whole numbers
+                                    return value + '°C';
                                 },
                                 padding: 10
                             },
@@ -1756,9 +1757,9 @@ if (isset($_GET['action'])) {
                     currentTemp = data.temperature;
                     currentStatus = data.status;
                     
-                    // Update temperature display - show whole number
+                    // Update temperature display
                     const tempEl = document.getElementById('temperature');
-                    tempEl.textContent = Math.round(data.temperature) + ' °C';
+                    tempEl.textContent = data.temperature.toFixed(1) + ' °C';
                     tempEl.className = 'temp-display temp-' + data.status.toLowerCase();
                     
                     // Update status indicator
@@ -1769,7 +1770,7 @@ if (isset($_GET['action'])) {
                     // Update timestamp
                     document.getElementById('lastUpdate').textContent = 'Last updated: ' + (data.timestamp || '');
                     
-                    // Update stats with whole numbers
+                    // Update stats
                     updateStats(data.temperature);
                     
                     // Update live chart
@@ -1786,9 +1787,9 @@ if (isset($_GET['action'])) {
         function updateStats(currentTemp) {
             if (currentTemp && !isNaN(currentTemp)) {
                 const temp = parseFloat(currentTemp);
-                const minTemp = Math.max(0, Math.round(temp - 2));
-                const avgTemp = Math.round(temp);
-                const maxTemp = Math.round(temp + 3);
+                const minTemp = Math.max(0, temp - 2).toFixed(1);
+                const avgTemp = temp.toFixed(1);
+                const maxTemp = (temp + 3).toFixed(1);
                 
                 document.getElementById('minTemp').textContent = minTemp + '°C';
                 document.getElementById('avgTemp').textContent = avgTemp + '°C';
@@ -1854,7 +1855,7 @@ if (isset($_GET['action'])) {
                     tbody.innerHTML = data.logs.slice().reverse().slice(0, 30).map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
-                            <td><strong>${Math.round(log.temperature)}°C</strong></td>
+                            <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
                                 <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
@@ -1903,7 +1904,7 @@ if (isset($_GET['action'])) {
                     tbody.innerHTML = data.logs.slice().reverse().map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
-                            <td><strong>${Math.round(log.temperature)}°C</strong></td>
+                            <td><strong>${log.temperature.toFixed(1)}°C</strong></td>
                             <td>
                                 <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
@@ -1925,7 +1926,7 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // ENHANCED History Graph Functions - SEPARATE LINES WITH BETTER VISIBILITY
+        // ENHANCED History Graph Functions - VISIBLE LINE CHART FOR EACH STATUS
         function initEnhancedHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
@@ -1937,11 +1938,11 @@ if (isset($_GET['action'])) {
                         {
                             label: 'Normal',
                             data: [],
-                            borderColor: '#10b981', // Bright green
-                            backgroundColor: 'transparent', // No fill for better visibility
-                            borderWidth: 3, // Thicker lines
-                            fill: false,
-                            tension: 0.2,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
                             pointBackgroundColor: '#10b981',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 2,
@@ -1951,11 +1952,11 @@ if (isset($_GET['action'])) {
                         {
                             label: 'Warning',
                             data: [],
-                            borderColor: '#f59e0b', // Bright orange
-                            backgroundColor: 'transparent', // No fill for better visibility
-                            borderWidth: 3, // Thicker lines
-                            fill: false,
-                            tension: 0.2,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
                             pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 2,
@@ -1965,11 +1966,11 @@ if (isset($_GET['action'])) {
                         {
                             label: 'Critical',
                             data: [],
-                            borderColor: '#ef4444', // Bright red
-                            backgroundColor: 'transparent', // No fill for better visibility
-                            borderWidth: 3, // Thicker lines
-                            fill: false,
-                            tension: 0.2,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
                             pointBackgroundColor: '#ef4444',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 2,
@@ -1992,8 +1993,7 @@ if (isset($_GET['action'])) {
                                 },
                                 padding: 20,
                                 usePointStyle: true,
-                                pointStyle: 'circle',
-                                boxWidth: 8
+                                pointStyle: 'circle'
                             }
                         },
                         tooltip: {
@@ -2007,7 +2007,8 @@ if (isset($_GET['action'])) {
                             callbacks: {
                                 label: function(context) {
                                     const value = context.parsed.y;
-                                    return Math.round(value) + '°C';
+                                    // Round to whole number
+                                    return `${Math.round(value)}°C`;
                                 }
                             }
                         }
@@ -2040,7 +2041,7 @@ if (isset($_GET['action'])) {
                                     weight: '500'
                                 },
                                 callback: function(value) {
-                                    return Math.round(value) + '°C'; // Whole numbers
+                                    return value + '°C';
                                 }
                             }
                         }
@@ -2048,11 +2049,6 @@ if (isset($_GET['action'])) {
                     interaction: {
                         intersect: false,
                         mode: 'index'
-                    },
-                    elements: {
-                        line: {
-                            tension: 0.2 // Smooth lines
-                        }
                     }
                 }
             });
@@ -2076,58 +2072,64 @@ if (isset($_GET['action'])) {
                     // Sort data by timestamp
                     data.data.sort((a, b) => new Date(a.x) - new Date(b.x));
                     
-                    // Create three separate datasets
+                    // Create labels with better formatting
+                    const labels = [];
                     const normalData = [];
                     const warningData = [];
                     const criticalData = [];
-                    const labels = [];
                     
-                    // Use fewer data points for better performance and visibility
-                    const maxPoints = window.innerWidth < 768 ? 40 : 80;
+                    // Process data in batches for better performance
+                    const maxPoints = window.innerWidth < 768 ? 60 : 120;
                     const step = Math.ceil(data.data.length / maxPoints);
                     
-                    // Process data in steps
                     for (let i = 0; i < data.data.length; i += step) {
                         const item = data.data[i];
                         const date = new Date(item.x);
-                        const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
-                                     date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        
+                        // Format label: "Jan 12 14:30"
+                        const label = date.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric' 
+                        }) + ' ' + date.toLocaleTimeString('en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: false 
+                        });
+                        
                         labels.push(label);
                         
                         // Add data to appropriate dataset
                         if (item.status === 'CRITICAL') {
-                            criticalData.push({x: i, y: Math.round(item.y)});
+                            criticalData.push(item.y);
                             warningData.push(null);
                             normalData.push(null);
                         } else if (item.status === 'WARNING') {
                             criticalData.push(null);
-                            warningData.push({x: i, y: Math.round(item.y)});
+                            warningData.push(item.y);
                             normalData.push(null);
                         } else {
                             criticalData.push(null);
                             warningData.push(null);
-                            normalData.push({x: i, y: Math.round(item.y)});
+                            normalData.push(item.y);
                         }
                     }
                     
-                    // Convert to simple arrays for Chart.js
-                    const normalDataset = normalData.map(item => item ? item.y : null);
-                    const warningDataset = warningData.map(item => item ? item.y : null);
-                    const criticalDataset = criticalData.map(item => item ? item.y : null);
-                    
                     if (historyChart) {
+                        // Update chart with new data
                         historyChart.data.labels = labels;
-                        historyChart.data.datasets[0].data = normalDataset;
-                        historyChart.data.datasets[1].data = warningDataset;
-                        historyChart.data.datasets[2].data = criticalDataset;
+                        historyChart.data.datasets[0].data = normalData;
+                        historyChart.data.datasets[1].data = warningData;
+                        historyChart.data.datasets[2].data = criticalData;
+                        
+                        // Calculate stats for notification
+                        const normalCount = normalData.filter(val => val !== null).length;
+                        const warningCount = warningData.filter(val => val !== null).length;
+                        const criticalCount = criticalData.filter(val => val !== null).length;
+                        
                         historyChart.update();
+                        
+                        showNotification(`Graph loaded: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical points`, 'success');
                     }
-                    
-                    // Show statistics
-                    const normalCount = normalData.filter(item => item !== null).length;
-                    const warningCount = warningData.filter(item => item !== null).length;
-                    const criticalCount = criticalData.filter(item => item !== null).length;
-                    showNotification(`Showing ${labels.length} time points`, 'success');
                 } else {
                     if (historyChart) {
                         historyChart.data.labels = [];
@@ -2145,7 +2147,7 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // Download Functions - WITH IMPROVED BUTTON VISIBILITY
+        // Download Functions
         function downloadCSV() {
             window.open('?action=download_logs&type=csv', '_blank');
         }
