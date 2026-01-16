@@ -882,7 +882,7 @@ if (isset($_GET['action'])) {
         
         /* =============== BUTTONS - WITH BORDER ONLY =============== */
         .btn {
-            padding: 10px 18px;
+            padding: 10px 16px;
             border-radius: 6px;
             font-size: 13px;
             font-weight: 600;
@@ -892,15 +892,18 @@ if (isset($_GET['action'])) {
             background: var(--accent);
             color: white;
             white-space: nowrap;
-            min-width: 140px;
+            min-width: 160px;
             text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         
         @media (max-width: 480px) {
             .btn {
                 padding: 10px 14px;
                 font-size: 12px;
-                min-width: 120px;
+                min-width: 140px;
             }
         }
         
@@ -1115,27 +1118,51 @@ if (isset($_GET['action'])) {
             background: rgba(255, 255, 255, 0.08);
         }
         
-        /* =============== MODAL ACTIONS - FIXED FOR BUTTON VISIBILITY =============== */
+        /* =============== MODAL ACTIONS - FIXED FOR FULL BUTTON VISIBILITY =============== */
         .modal-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             margin-top: 15px;
             flex-wrap: wrap;
             justify-content: flex-start;
             align-items: center;
             width: 100%;
+            padding: 10px 0;
         }
         
+        /* Mobile: Stack buttons vertically */
         @media (max-width: 480px) {
             .modal-actions {
                 flex-direction: column;
-                gap: 8px;
+                gap: 10px;
                 align-items: stretch;
             }
             
             .modal-actions .btn {
                 width: 100%;
                 min-width: unset;
+                margin: 0;
+            }
+        }
+        
+        /* Tablet: Show buttons in a row with wrapping */
+        @media (min-width: 481px) and (max-width: 768px) {
+            .modal-actions {
+                gap: 10px;
+                justify-content: center;
+            }
+            
+            .modal-actions .btn {
+                flex: 1;
+                min-width: 140px;
+            }
+        }
+        
+        /* Desktop: Standard row layout */
+        @media (min-width: 769px) {
+            .modal-actions {
+                gap: 15px;
+                justify-content: flex-start;
             }
         }
         
@@ -1539,15 +1566,13 @@ if (isset($_GET['action'])) {
                             cornerRadius: 8,
                             padding: 12,
                             callbacks: {
-                                // SIMPLIFIED TOOLTIP - ONLY SHOW WHOLE NUMBER TEMPERATURE
+                                // SIMPLIFIED TOOLTIP - ONLY SHOW WHOLE NUMBER TEMPERATURE (NO DOUBLE TEXT)
                                 label: function(context) {
                                     const value = Math.round(context.parsed.y); // ROUND TO WHOLE NUMBER
                                     return `Temperature: ${value}°C`;
                                 },
-                                // REMOVED WARNING MESSAGES COMPLETELY
-                                afterLabel: function(context) {
-                                    return ''; // Return empty string - no warning messages
-                                }
+                                // REMOVED afterLabel COMPLETELY TO AVOID DOUBLE TEXT
+                                afterLabel: null
                             }
                         }
                     },
@@ -1907,56 +1932,56 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // ENHANCED History Graph Functions - IMPROVED VISIBILITY WITH LINE CHART
+        // ENHANCED History Graph Functions - IMPROVED VISIBILITY FOR WARNING AND CRITICAL LINES
         function initEnhancedHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
             historyChart = new Chart(ctx, {
-                type: 'line', // LINE CHART FOR BETTER VISIBILITY
+                type: 'line',
                 data: {
                     labels: [],
                     datasets: [
                         {
                             label: 'Normal Temperature',
                             data: [],
-                            borderColor: '#10b981', // BRIGHT GREEN
+                            borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            borderWidth: 2,
+                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
                             fill: false,
-                            tension: 0.2,
+                            tension: 0.3,
                             pointBackgroundColor: '#10b981',
                             pointBorderColor: '#ffffff',
-                            pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointBorderWidth: 2,
+                            pointRadius: 4, // LARGER POINTS
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Warning Temperature',
                             data: [],
-                            borderColor: '#f59e0b', // BRIGHT ORANGE
+                            borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            borderWidth: 2,
+                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
                             fill: false,
-                            tension: 0.2,
+                            tension: 0.3,
                             pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#ffffff',
-                            pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointBorderWidth: 2,
+                            pointRadius: 4, // LARGER POINTS
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Critical Temperature',
                             data: [],
-                            borderColor: '#ef4444', // BRIGHT RED
+                            borderColor: '#ef4444',
                             backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            borderWidth: 2,
+                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
                             fill: false,
-                            tension: 0.2,
+                            tension: 0.3,
                             pointBackgroundColor: '#ef4444',
                             pointBorderColor: '#ffffff',
-                            pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointBorderWidth: 2,
+                            pointRadius: 4, // LARGER POINTS
+                            pointHoverRadius: 6
                         }
                     ]
                 },
@@ -1974,7 +1999,9 @@ if (isset($_GET['action'])) {
                                 },
                                 padding: 15,
                                 usePointStyle: true,
-                                pointStyle: 'circle'
+                                pointStyle: 'circle',
+                                boxWidth: 10,
+                                boxHeight: 10
                             }
                         },
                         tooltip: {
@@ -1984,7 +2011,7 @@ if (isset($_GET['action'])) {
                             borderColor: '#475569',
                             borderWidth: 1,
                             cornerRadius: 6,
-                            padding: 10,
+                            padding: 12,
                             callbacks: {
                                 label: function(context) {
                                     const value = Math.round(context.parsed.y); // WHOLE NUMBER
@@ -2092,13 +2119,23 @@ if (isset($_GET['action'])) {
                         return dateA - dateB;
                     });
                     
-                    // Limit labels for performance
-                    const maxPoints = window.innerWidth < 768 ? 40 : 80;
+                    // Limit labels for performance but ensure enough points for visibility
+                    const maxPoints = window.innerWidth < 768 ? 50 : 100;
                     const step = Math.ceil(allLabels.length / maxPoints);
                     const filteredLabels = [];
                     
                     for (let i = 0; i < allLabels.length; i += step) {
                         filteredLabels.push(allLabels[i]);
+                    }
+                    
+                    // Ensure we have at least 10 labels for proper graph display
+                    if (filteredLabels.length < 10 && allLabels.length > 10) {
+                        filteredLabels.push(...allLabels.slice(-10));
+                        filteredLabels.sort((a, b) => {
+                            const dateA = new Date(a.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
+                            const dateB = new Date(b.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
+                            return dateA - dateB;
+                        });
                     }
                     
                     // Create datasets with null values for missing points
