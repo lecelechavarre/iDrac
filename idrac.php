@@ -936,12 +936,14 @@ if (isset($_GET['action'])) {
             }
         }
         
+        /* REMOVED BORDER BETWEEN MODAL-HEADER AND MODAL-TABS */
         .modal-header {
             padding: 15px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            /* REMOVED BORDER BOTTOM */
+            border-bottom: none;
         }
         
         .modal-title {
@@ -1458,7 +1460,7 @@ if (isset($_GET['action'])) {
         let liveLogsInterval = null;
         let temperatureUpdateInterval = null;
 
-        // Initialize Enhanced Live Chart with Threshold Zones
+        // Initialize Enhanced Live Chart with Fixed Threshold Lines
         function initLiveChart() {
             const ctx = document.getElementById('liveChart').getContext('2d');
             
@@ -1502,6 +1504,7 @@ if (isset($_GET['action'])) {
                             display: false
                         },
                         tooltip: {
+                            enabled: true,
                             backgroundColor: 'rgba(30, 41, 59, 0.95)',
                             titleColor: '#f1f5f9',
                             bodyColor: '#cbd5e1',
@@ -1577,41 +1580,58 @@ if (isset($_GET['action'])) {
                 }
             });
             
-            // Add threshold annotations (visual zones)
-            addThresholdZones();
+            // Add FIXED threshold lines that extend fully across the graph
+            addFixedThresholdLines();
         }
 
-        function addThresholdZones() {
+        function addFixedThresholdLines() {
             if (!liveChart) return;
             
-            // Add annotation for warning zone
+            // Get current number of labels or use a fixed number
+            const labelCount = chartData.labels.length || 10;
+            
+            // Create arrays with the same value for all labels
+            const warningLineData = new Array(labelCount).fill(WARNING_TEMP);
+            const criticalLineData = new Array(labelCount).fill(CRITICAL_TEMP);
+            
+            // Add warning line - NO HOVER TEXT, NO TOOLTIPS
             liveChart.data.datasets.push({
-                label: 'Warning Zone',
-                data: Array(chartData.labels.length).fill(WARNING_TEMP),
+                label: 'Warning Threshold',
+                data: warningLineData,
                 borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                backgroundColor: 'transparent',
                 borderWidth: 2,
                 borderDash: [5, 5],
-                fill: {
-                    target: '+1',
-                    above: 'rgba(245, 158, 11, 0.05)'
+                fill: false,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                // DISABLE TOOLTIPS AND HOVER FOR THRESHOLD LINES
+                tooltip: {
+                    enabled: false
                 },
-                pointRadius: 0
+                hover: {
+                    mode: null
+                }
             });
             
-            // Add annotation for critical zone
+            // Add critical line - NO HOVER TEXT, NO TOOLTIPS
             liveChart.data.datasets.push({
-                label: 'Critical Zone',
-                data: Array(chartData.labels.length).fill(CRITICAL_TEMP),
+                label: 'Critical Threshold',
+                data: criticalLineData,
                 borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                backgroundColor: 'transparent',
                 borderWidth: 2,
                 borderDash: [5, 5],
-                fill: {
-                    target: '+1',
-                    above: 'rgba(239, 68, 68, 0.05)'
+                fill: false,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                // DISABLE TOOLTIPS AND HOVER FOR THRESHOLD LINES
+                tooltip: {
+                    enabled: false
                 },
-                pointRadius: 0
+                hover: {
+                    mode: null
+                }
             });
             
             liveChart.update('none');
@@ -1633,8 +1653,9 @@ if (isset($_GET['action'])) {
             else if (temp >= WARNING_TEMP) status = 'WARNING';
             chartData.status.push(status);
             
-            // Update threshold zones
+            // Update threshold lines to maintain full width
             if (liveChart.data.datasets.length > 1) {
+                // Always keep threshold lines the same length as data points
                 liveChart.data.datasets[1].data.push(WARNING_TEMP);
                 liveChart.data.datasets[2].data.push(CRITICAL_TEMP);
             }
@@ -1649,6 +1670,7 @@ if (isset($_GET['action'])) {
                 chartData.data.shift();
                 chartData.status.shift();
                 if (liveChart.data.datasets.length > 1) {
+                    // Also shift threshold lines to maintain alignment
                     liveChart.data.datasets[1].data.shift();
                     liveChart.data.datasets[2].data.shift();
                 }
@@ -1665,6 +1687,14 @@ if (isset($_GET['action'])) {
                 if (status === 'WARNING') return '#f59e0b';
                 return '#10b981';
             });
+            
+            // Ensure threshold lines have same length as data
+            if (liveChart.data.datasets.length > 1) {
+                const warningData = new Array(chartData.labels.length).fill(WARNING_TEMP);
+                const criticalData = new Array(chartData.labels.length).fill(CRITICAL_TEMP);
+                liveChart.data.datasets[1].data = warningData;
+                liveChart.data.datasets[2].data = criticalData;
+            }
             
             // Update chart max if needed
             const maxTemp = Math.max(...chartData.data);
@@ -1764,7 +1794,7 @@ if (isset($_GET['action'])) {
                 document.getElementById('graphStartDate').value = getDateString(-7);
                 document.getElementById('graphEndDate').value = getDateString(0);
                 if (!historyChart) {
-                    initHistoryChart();
+                    initEnhancedHistoryChart();
                 }
             }
         }
@@ -1857,8 +1887,8 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // History Graph Functions
-        function initHistoryChart() {
+        // ENHANCED History Graph Functions - SEPARATE LINES FOR EACH STATUS
+        function initEnhancedHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
             historyChart = new Chart(ctx, {
@@ -1867,46 +1897,46 @@ if (isset($_GET['action'])) {
                     labels: [],
                     datasets: [
                         {
-                            label: 'Normal',
+                            label: 'Normal Temperature',
                             data: [],
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
+                            fill: false,
+                            tension: 0.2,
                             pointBackgroundColor: '#10b981',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointRadius: 3,
+                            pointHoverRadius: 5
                         },
                         {
-                            label: 'Warning',
+                            label: 'Warning Temperature',
                             data: [],
                             borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.1)',
                             borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
+                            fill: false,
+                            tension: 0.2,
                             pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointRadius: 3,
+                            pointHoverRadius: 5
                         },
                         {
-                            label: 'Critical',
+                            label: 'Critical Temperature',
                             data: [],
                             borderColor: '#ef4444',
                             backgroundColor: 'rgba(239, 68, 68, 0.1)',
                             borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
+                            fill: false,
+                            tension: 0.2,
                             pointBackgroundColor: '#ef4444',
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 1,
-                            pointRadius: 2,
-                            pointHoverRadius: 4
+                            pointRadius: 3,
+                            pointHoverRadius: 5
                         }
                     ]
                 },
@@ -1919,16 +1949,18 @@ if (isset($_GET['action'])) {
                                 color: '#cbd5e1',
                                 font: {
                                     size: 11
-                                }
+                                },
+                                padding: 15
                             }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
                             titleColor: '#f1f5f9',
                             bodyColor: '#cbd5e1',
                             borderColor: '#475569',
                             borderWidth: 1,
-                            cornerRadius: 6
+                            cornerRadius: 6,
+                            padding: 10
                         }
                     },
                     scales: {
@@ -1942,7 +1974,7 @@ if (isset($_GET['action'])) {
                                 font: {
                                     size: 9
                                 },
-                                maxTicksLimit: 10
+                                maxTicksLimit: 12
                             }
                         },
                         y: {
@@ -1961,6 +1993,10 @@ if (isset($_GET['action'])) {
                                 }
                             }
                         }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
                     }
                 }
             });
@@ -1981,46 +2017,105 @@ if (isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success && data.data.length > 0) {
-                    // Separate data by status
+                    // Separate data into three distinct arrays for each status
                     const normalData = [];
                     const warningData = [];
                     const criticalData = [];
                     const labels = [];
                     
-                    // Limit data points for performance
-                    const maxPoints = window.innerWidth < 768 ? 50 : 100;
-                    const step = Math.ceil(data.data.length / maxPoints);
+                    // Group data points by status for clean separation
+                    const groupedData = {
+                        normal: [],
+                        warning: [],
+                        critical: []
+                    };
                     
-                    for (let i = 0; i < data.data.length; i += step) {
-                        const item = data.data[i];
+                    // Sort data by timestamp
+                    data.data.sort((a, b) => new Date(a.x) - new Date(b.x));
+                    
+                    // Group by status and create separate datasets
+                    data.data.forEach(item => {
                         const date = new Date(item.x);
                         const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
                                      date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                        labels.push(label);
                         
                         if (item.status === 'CRITICAL') {
-                            criticalData.push(item.y);
-                            warningData.push(null);
-                            normalData.push(null);
+                            groupedData.critical.push({x: label, y: item.y});
                         } else if (item.status === 'WARNING') {
-                            criticalData.push(null);
-                            warningData.push(item.y);
-                            normalData.push(null);
+                            groupedData.warning.push({x: label, y: item.y});
                         } else {
-                            criticalData.push(null);
-                            warningData.push(null);
-                            normalData.push(item.y);
+                            groupedData.normal.push({x: label, y: item.y});
                         }
+                    });
+                    
+                    // Create labels from all unique timestamps
+                    const allLabels = [...new Set(data.data.map(item => {
+                        const date = new Date(item.x);
+                        return date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
+                               date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }))];
+                    
+                    // Sort labels chronologically
+                    allLabels.sort((a, b) => {
+                        const dateA = new Date(a.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
+                        const dateB = new Date(b.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
+                        return dateA - dateB;
+                    });
+                    
+                    // Limit labels for performance
+                    const maxPoints = window.innerWidth < 768 ? 40 : 80;
+                    const step = Math.ceil(allLabels.length / maxPoints);
+                    const filteredLabels = [];
+                    
+                    for (let i = 0; i < allLabels.length; i += step) {
+                        filteredLabels.push(allLabels[i]);
                     }
                     
+                    // Create datasets with null values for missing points
+                    const normalDataset = [];
+                    const warningDataset = [];
+                    const criticalDataset = [];
+                    
+                    // Create lookup maps for faster access
+                    const normalMap = new Map(groupedData.normal.map(item => [item.x, item.y]));
+                    const warningMap = new Map(groupedData.warning.map(item => [item.x, item.y]));
+                    const criticalMap = new Map(groupedData.critical.map(item => [item.x, item.y]));
+                    
+                    // Fill datasets
+                    filteredLabels.forEach(label => {
+                        if (criticalMap.has(label)) {
+                            criticalDataset.push(criticalMap.get(label));
+                            warningDataset.push(null);
+                            normalDataset.push(null);
+                        } else if (warningMap.has(label)) {
+                            criticalDataset.push(null);
+                            warningDataset.push(warningMap.get(label));
+                            normalDataset.push(null);
+                        } else if (normalMap.has(label)) {
+                            criticalDataset.push(null);
+                            warningDataset.push(null);
+                            normalDataset.push(normalMap.get(label));
+                        } else {
+                            // If no data for this timestamp, add null to all
+                            criticalDataset.push(null);
+                            warningDataset.push(null);
+                            normalDataset.push(null);
+                        }
+                    });
+                    
                     if (historyChart) {
-                        historyChart.data.labels = labels;
-                        historyChart.data.datasets[0].data = normalData;
-                        historyChart.data.datasets[1].data = warningData;
-                        historyChart.data.datasets[2].data = criticalData;
+                        historyChart.data.labels = filteredLabels;
+                        historyChart.data.datasets[0].data = normalDataset;
+                        historyChart.data.datasets[1].data = warningDataset;
+                        historyChart.data.datasets[2].data = criticalDataset;
                         historyChart.update();
                     }
-                    showNotification(`Showing ${labels.length} data points`, 'success');
+                    
+                    // Show statistics
+                    const normalCount = groupedData.normal.length;
+                    const warningCount = groupedData.warning.length;
+                    const criticalCount = groupedData.critical.length;
+                    showNotification(`Showing ${filteredLabels.length} time points: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical`, 'success');
                 } else {
                     if (historyChart) {
                         historyChart.data.labels = [];
@@ -2158,7 +2253,7 @@ if (isset($_GET['action'])) {
             
             if (liveChart) {
                 liveChart.update();
-                addThresholdZones();
+                addFixedThresholdLines();
             }
             
             // Add resize listener
