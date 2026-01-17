@@ -1,5 +1,5 @@
 <?php
-// iDRAC Temperature Monitor - Standalone Version
+// iDRAC Temperature Monitor - Standalone Version 
 // Include configuration 
 require_once __DIR__ . '/idrac_config.php';
 
@@ -594,4 +594,5 @@ if (isset($_GET['action'])) {
     </script>
 </body>
 </html>
+
 
