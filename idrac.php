@@ -1118,16 +1118,16 @@ if (isset($_GET['action'])) {
             background: rgba(255, 255, 255, 0.08);
         }
         
-        /* =============== MODAL ACTIONS - FIXED FOR FULL BUTTON VISIBILITY =============== */
+        /* =============== IMPROVED MODAL ACTIONS FOR BETTER VISIBILITY =============== */
         .modal-actions {
             display: flex;
             gap: 12px;
             margin-top: 15px;
             flex-wrap: wrap;
-            justify-content: flex-start;
+            justify-content: center;
             align-items: center;
             width: 100%;
-            padding: 10px 0;
+            padding: 15px 0;
         }
         
         /* Mobile: Stack buttons vertically */
@@ -1142,27 +1142,57 @@ if (isset($_GET['action'])) {
                 width: 100%;
                 min-width: unset;
                 margin: 0;
+                padding: 12px 16px;
+                font-size: 14px;
             }
         }
         
-        /* Tablet: Show buttons in a row with wrapping */
-        @media (min-width: 481px) and (max-width: 768px) {
+        /* Small Tablet: Show 2 buttons per row */
+        @media (min-width: 481px) and (max-width: 767px) {
             .modal-actions {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
                 justify-content: center;
             }
             
             .modal-actions .btn {
+                width: 100%;
+                min-width: unset;
+                padding: 12px 10px;
+                font-size: 13px;
+            }
+        }
+        
+        /* Tablet: Show buttons in a single row with wrapping */
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .modal-actions {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 12px;
+            }
+            
+            .modal-actions .btn {
                 flex: 1;
-                min-width: 140px;
+                min-width: 180px;
+                max-width: 200px;
+                padding: 12px 15px;
             }
         }
         
         /* Desktop: Standard row layout */
-        @media (min-width: 769px) {
+        @media (min-width: 1024px) {
             .modal-actions {
-                gap: 15px;
+                display: flex;
+                flex-wrap: nowrap;
                 justify-content: flex-start;
+                gap: 15px;
+            }
+            
+            .modal-actions .btn {
+                flex: none;
+                min-width: 180px;
             }
         }
         
@@ -1528,7 +1558,7 @@ if (isset($_GET['action'])) {
                     labels: chartData.labels,
                     datasets: [
                         {
-                            label: 'Temperature (°C)',
+                            label: 'Temperature',
                             data: chartData.data,
                             borderColor: '#3b82f6',
                             backgroundColor: gradient,
@@ -1566,12 +1596,12 @@ if (isset($_GET['action'])) {
                             cornerRadius: 8,
                             padding: 12,
                             callbacks: {
-                                // SIMPLIFIED TOOLTIP - ONLY SHOW WHOLE NUMBER TEMPERATURE (NO DOUBLE TEXT)
+                                // CONDITION 1: Only show temperature without warning/critical text
                                 label: function(context) {
-                                    const value = Math.round(context.parsed.y); // ROUND TO WHOLE NUMBER
+                                    const value = Math.round(context.parsed.y);
                                     return `Temperature: ${value}°C`;
                                 },
-                                // REMOVED afterLabel COMPLETELY TO AVOID DOUBLE TEXT
+                                // Remove afterLabel completely
                                 afterLabel: null
                             }
                         }
@@ -1605,7 +1635,7 @@ if (isset($_GET['action'])) {
                                     weight: '500'
                                 },
                                 callback: function(value) {
-                                    return Math.round(value) + '°C'; // WHOLE NUMBERS ON Y-AXIS
+                                    return Math.round(value) + '°C';
                                 },
                                 padding: 10
                             },
@@ -1631,10 +1661,7 @@ if (isset($_GET['action'])) {
         function addFixedThresholdLines() {
             if (!liveChart) return;
             
-            // Get current number of labels or use a fixed number
             const labelCount = chartData.labels.length || 10;
-            
-            // Create arrays with the same value for all labels
             const warningLineData = new Array(labelCount).fill(WARNING_TEMP);
             const criticalLineData = new Array(labelCount).fill(CRITICAL_TEMP);
             
@@ -1649,7 +1676,6 @@ if (isset($_GET['action'])) {
                 fill: false,
                 pointRadius: 0,
                 pointHoverRadius: 0,
-                // DISABLE TOOLTIPS AND HOVER FOR THRESHOLD LINES
                 tooltip: {
                     enabled: false
                 },
@@ -1669,7 +1695,6 @@ if (isset($_GET['action'])) {
                 fill: false,
                 pointRadius: 0,
                 pointHoverRadius: 0,
-                // DISABLE TOOLTIPS AND HOVER FOR THRESHOLD LINES
                 tooltip: {
                     enabled: false
                 },
@@ -1685,26 +1710,21 @@ if (isset($_GET['action'])) {
         function updateLiveChart(temp, timestamp) {
             if (!liveChart) return;
             
-            const timeLabel = timestamp.split(' ')[1].substring(0, 5); // HH:MM
+            const timeLabel = timestamp.split(' ')[1].substring(0, 5);
             
-            // Add new data point
             chartData.labels.push(timeLabel);
             chartData.data.push(temp);
             
-            // Determine status for this point
             let status = 'NORMAL';
             if (temp >= CRITICAL_TEMP) status = 'CRITICAL';
             else if (temp >= WARNING_TEMP) status = 'WARNING';
             chartData.status.push(status);
             
-            // Update threshold lines to maintain full width
             if (liveChart.data.datasets.length > 1) {
-                // Always keep threshold lines the same length as data points
                 liveChart.data.datasets[1].data.push(WARNING_TEMP);
                 liveChart.data.datasets[2].data.push(CRITICAL_TEMP);
             }
             
-            // Keep only last 15 points for mobile, 25 for tablet, 30 for desktop
             let maxPoints = 15;
             if (window.innerWidth >= 768 && window.innerWidth < 1024) maxPoints = 25;
             if (window.innerWidth >= 1024) maxPoints = 30;
@@ -1714,17 +1734,14 @@ if (isset($_GET['action'])) {
                 chartData.data.shift();
                 chartData.status.shift();
                 if (liveChart.data.datasets.length > 1) {
-                    // Also shift threshold lines to maintain alignment
                     liveChart.data.datasets[1].data.shift();
                     liveChart.data.datasets[2].data.shift();
                 }
             }
             
-            // Update chart
             liveChart.data.labels = [...chartData.labels];
             liveChart.data.datasets[0].data = [...chartData.data];
             
-            // Update point colors based on status
             liveChart.data.datasets[0].pointBackgroundColor = chartData.data.map((value, index) => {
                 const status = chartData.status[index];
                 if (status === 'CRITICAL') return '#ef4444';
@@ -1732,7 +1749,6 @@ if (isset($_GET['action'])) {
                 return '#10b981';
             });
             
-            // Ensure threshold lines have same length as data
             if (liveChart.data.datasets.length > 1) {
                 const warningData = new Array(chartData.labels.length).fill(WARNING_TEMP);
                 const criticalData = new Array(chartData.labels.length).fill(CRITICAL_TEMP);
@@ -1740,7 +1756,6 @@ if (isset($_GET['action'])) {
                 liveChart.data.datasets[2].data = criticalData;
             }
             
-            // Update chart max if needed
             const maxTemp = Math.max(...chartData.data);
             if (maxTemp > liveChart.options.scales.y.suggestedMax - 5) {
                 liveChart.options.scales.y.suggestedMax = Math.max(CRITICAL_TEMP + 10, maxTemp + 5);
@@ -1762,26 +1777,20 @@ if (isset($_GET['action'])) {
                     currentTemp = data.temperature;
                     currentStatus = data.status;
                     
-                    // Update temperature display - ROUND TO WHOLE NUMBER
                     const tempEl = document.getElementById('temperature');
-                    tempEl.textContent = Math.round(data.temperature) + ' °C'; // WHOLE NUMBER
+                    tempEl.textContent = Math.round(data.temperature) + ' °C';
                     tempEl.className = 'temp-display temp-' + data.status.toLowerCase();
                     
-                    // Update status indicator
                     const statusEl = document.getElementById('statusIndicator');
                     statusEl.textContent = data.status;
                     statusEl.className = 'status ' + data.status.toLowerCase();
                     
-                    // Update timestamp
                     document.getElementById('lastUpdate').textContent = 'Last updated: ' + (data.timestamp || '');
                     
-                    // Update stats
                     updateStats(data.temperature);
                     
-                    // Update live chart
                     updateLiveChart(data.temperature, data.timestamp);
                     
-                    // Send to log API
                     await sendTempToLog(data.temperature);
                 }
             } catch (error) {
@@ -1796,7 +1805,6 @@ if (isset($_GET['action'])) {
                 const avgTemp = temp;
                 const maxTemp = temp + 3;
                 
-                // ROUND TO WHOLE NUMBERS
                 document.getElementById('minTemp').textContent = Math.round(minTemp) + '°C';
                 document.getElementById('avgTemp').textContent = Math.round(avgTemp) + '°C';
                 document.getElementById('maxTemp').textContent = Math.round(maxTemp) + '°C';
@@ -1817,13 +1825,11 @@ if (isset($_GET['action'])) {
         }
 
         function showModalTab(tabName) {
-            // Update tabs
             document.querySelectorAll('.modal-tab').forEach(tab => {
                 tab.classList.remove('active');
             });
             event.target.classList.add('active');
             
-            // Show selected tab content
             document.getElementById('live-tab').style.display = 'none';
             document.getElementById('history-tab').style.display = 'none';
             document.getElementById('graph-tab').style.display = 'none';
@@ -1831,11 +1837,9 @@ if (isset($_GET['action'])) {
             document.getElementById(tabName + '-tab').style.display = 'block';
             
             if (tabName === 'history') {
-                // Initialize date pickers with default values
                 document.getElementById('historyStartDate').value = getDateString(-7);
                 document.getElementById('historyEndDate').value = getDateString(0);
             } else if (tabName === 'graph') {
-                // Initialize date pickers for graph
                 document.getElementById('graphStartDate').value = getDateString(-7);
                 document.getElementById('graphEndDate').value = getDateString(0);
                 if (!historyChart) {
@@ -1861,7 +1865,7 @@ if (isset($_GET['action'])) {
                     tbody.innerHTML = data.logs.slice().reverse().slice(0, 30).map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
-                            <td><strong>${Math.round(log.temperature)}°C</strong></td> <!-- WHOLE NUMBER -->
+                            <td><strong>${Math.round(log.temperature)}°C</strong></td>
                             <td>
                                 <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
@@ -1910,7 +1914,7 @@ if (isset($_GET['action'])) {
                     tbody.innerHTML = data.logs.slice().reverse().map(log => `
                         <tr>
                             <td>${log.timestamp}</td>
-                            <td><strong>${Math.round(log.temperature)}°C</strong></td> <!-- WHOLE NUMBER -->
+                            <td><strong>${Math.round(log.temperature)}°C</strong></td>
                             <td>
                                 <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
                                     ${getStatusText(log.temperature)}
@@ -1932,7 +1936,7 @@ if (isset($_GET['action'])) {
             showLoading(false);
         }
 
-        // ENHANCED History Graph Functions - IMPROVED VISIBILITY FOR WARNING AND CRITICAL LINES
+        // CONDITION 3: ENHANCED History Graph with Combined Color Lines
         function initEnhancedHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
@@ -1942,46 +1946,64 @@ if (isset($_GET['action'])) {
                     labels: [],
                     datasets: [
                         {
-                            label: 'Normal Temperature',
+                            label: 'Temperature',
                             data: [],
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
-                            fill: false,
+                            borderColor: function(context) {
+                                const value = context.dataset.data[context.dataIndex];
+                                if (value !== null) {
+                                    if (value >= CRITICAL_TEMP) return '#ef4444';
+                                    if (value >= WARNING_TEMP) return '#f59e0b';
+                                    return '#10b981';
+                                }
+                                return '#3b82f6';
+                            },
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
                             tension: 0.3,
-                            pointBackgroundColor: '#10b981',
+                            pointBackgroundColor: function(context) {
+                                const value = context.dataset.data[context.dataIndex];
+                                if (value !== null) {
+                                    if (value >= CRITICAL_TEMP) return '#ef4444';
+                                    if (value >= WARNING_TEMP) return '#f59e0b';
+                                    return '#10b981';
+                                }
+                                return '#3b82f6';
+                            },
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 2,
-                            pointRadius: 4, // LARGER POINTS
+                            pointRadius: 4,
                             pointHoverRadius: 6
                         },
                         {
-                            label: 'Warning Temperature',
+                            // Warning threshold line
+                            label: 'Warning Threshold',
                             data: [],
                             borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
                             fill: false,
-                            tension: 0.3,
-                            pointBackgroundColor: '#f59e0b',
-                            pointBorderColor: '#ffffff',
-                            pointBorderWidth: 2,
-                            pointRadius: 4, // LARGER POINTS
-                            pointHoverRadius: 6
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            tooltip: {
+                                enabled: false
+                            }
                         },
                         {
-                            label: 'Critical Temperature',
+                            // Critical threshold line
+                            label: 'Critical Threshold',
                             data: [],
                             borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            borderWidth: 3, // THICKER LINE FOR BETTER VISIBILITY
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
                             fill: false,
-                            tension: 0.3,
-                            pointBackgroundColor: '#ef4444',
-                            pointBorderColor: '#ffffff',
-                            pointBorderWidth: 2,
-                            pointRadius: 4, // LARGER POINTS
-                            pointHoverRadius: 6
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            tooltip: {
+                                enabled: false
+                            }
                         }
                     ]
                 },
@@ -2001,7 +2023,11 @@ if (isset($_GET['action'])) {
                                 usePointStyle: true,
                                 pointStyle: 'circle',
                                 boxWidth: 10,
-                                boxHeight: 10
+                                boxHeight: 10,
+                                filter: function(item, chart) {
+                                    // Only show main temperature legend
+                                    return item.datasetIndex === 0;
+                                }
                             }
                         },
                         tooltip: {
@@ -2014,8 +2040,11 @@ if (isset($_GET['action'])) {
                             padding: 12,
                             callbacks: {
                                 label: function(context) {
-                                    const value = Math.round(context.parsed.y); // WHOLE NUMBER
-                                    return `${context.dataset.label}: ${value}°C`;
+                                    const value = Math.round(context.parsed.y);
+                                    let status = 'Normal';
+                                    if (value >= CRITICAL_TEMP) status = 'Critical';
+                                    else if (value >= WARNING_TEMP) status = 'Warning';
+                                    return `Temperature: ${value}°C (${status})`;
                                 }
                             }
                         }
@@ -2046,7 +2075,7 @@ if (isset($_GET['action'])) {
                                     size: 10
                                 },
                                 callback: function(value) {
-                                    return Math.round(value) + '°C'; // WHOLE NUMBERS
+                                    return Math.round(value) + '°C';
                                 }
                             }
                         }
@@ -2074,115 +2103,94 @@ if (isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success && data.data.length > 0) {
-                    // Separate data into three distinct arrays for each status
-                    const normalData = [];
-                    const warningData = [];
-                    const criticalData = [];
                     const labels = [];
-                    
-                    // Group data points by status for clean separation
-                    const groupedData = {
-                        normal: [],
-                        warning: [],
-                        critical: []
-                    };
+                    const temperatureData = [];
                     
                     // Sort data by timestamp
                     data.data.sort((a, b) => new Date(a.x) - new Date(b.x));
                     
-                    // Group by status and create separate datasets
+                    // Prepare data for single line with dynamic colors
                     data.data.forEach(item => {
                         const date = new Date(item.x);
                         const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
                                      date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                         
-                        if (item.status === 'CRITICAL') {
-                            groupedData.critical.push({x: label, y: Math.round(item.y)}); // WHOLE NUMBER
-                        } else if (item.status === 'WARNING') {
-                            groupedData.warning.push({x: label, y: Math.round(item.y)}); // WHOLE NUMBER
-                        } else {
-                            groupedData.normal.push({x: label, y: Math.round(item.y)}); // WHOLE NUMBER
-                        }
+                        labels.push(label);
+                        temperatureData.push(Math.round(item.y));
                     });
                     
-                    // Create labels from all unique timestamps
-                    const allLabels = [...new Set(data.data.map(item => {
-                        const date = new Date(item.x);
-                        return date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
-                               date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    }))];
-                    
-                    // Sort labels chronologically
-                    allLabels.sort((a, b) => {
-                        const dateA = new Date(a.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
-                        const dateB = new Date(b.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
-                        return dateA - dateB;
-                    });
-                    
-                    // Limit labels for performance but ensure enough points for visibility
+                    // Limit labels for performance
                     const maxPoints = window.innerWidth < 768 ? 50 : 100;
-                    const step = Math.ceil(allLabels.length / maxPoints);
+                    const step = Math.ceil(labels.length / maxPoints);
                     const filteredLabels = [];
+                    const filteredData = [];
                     
-                    for (let i = 0; i < allLabels.length; i += step) {
-                        filteredLabels.push(allLabels[i]);
+                    for (let i = 0; i < labels.length; i += step) {
+                        filteredLabels.push(labels[i]);
+                        filteredData.push(temperatureData[i]);
                     }
                     
-                    // Ensure we have at least 10 labels for proper graph display
-                    if (filteredLabels.length < 10 && allLabels.length > 10) {
-                        filteredLabels.push(...allLabels.slice(-10));
-                        filteredLabels.sort((a, b) => {
-                            const dateA = new Date(a.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
-                            const dateB = new Date(b.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'));
-                            return dateA - dateB;
+                    // Ensure we have at least 10 labels
+                    if (filteredLabels.length < 10 && labels.length > 10) {
+                        const startIdx = Math.max(0, labels.length - 10);
+                        for (let i = startIdx; i < labels.length; i++) {
+                            if (!filteredLabels.includes(labels[i])) {
+                                filteredLabels.push(labels[i]);
+                                filteredData.push(temperatureData[i]);
+                            }
+                        }
+                        
+                        // Sort chronologically
+                        const combined = filteredLabels.map((label, idx) => ({
+                            label,
+                            data: filteredData[idx],
+                            timestamp: new Date(label.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'))
+                        }));
+                        
+                        combined.sort((a, b) => a.timestamp - b.timestamp);
+                        
+                        filteredLabels.length = 0;
+                        filteredData.length = 0;
+                        
+                        combined.forEach(item => {
+                            filteredLabels.push(item.label);
+                            filteredData.push(item.data);
                         });
                     }
                     
-                    // Create datasets with null values for missing points
-                    const normalDataset = [];
-                    const warningDataset = [];
-                    const criticalDataset = [];
-                    
-                    // Create lookup maps for faster access
-                    const normalMap = new Map(groupedData.normal.map(item => [item.x, item.y]));
-                    const warningMap = new Map(groupedData.warning.map(item => [item.x, item.y]));
-                    const criticalMap = new Map(groupedData.critical.map(item => [item.x, item.y]));
-                    
-                    // Fill datasets
-                    filteredLabels.forEach(label => {
-                        if (criticalMap.has(label)) {
-                            criticalDataset.push(criticalMap.get(label));
-                            warningDataset.push(null);
-                            normalDataset.push(null);
-                        } else if (warningMap.has(label)) {
-                            criticalDataset.push(null);
-                            warningDataset.push(warningMap.get(label));
-                            normalDataset.push(null);
-                        } else if (normalMap.has(label)) {
-                            criticalDataset.push(null);
-                            warningDataset.push(null);
-                            normalDataset.push(normalMap.get(label));
-                        } else {
-                            // If no data for this timestamp, add null to all
-                            criticalDataset.push(null);
-                            warningDataset.push(null);
-                            normalDataset.push(null);
-                        }
-                    });
-                    
                     if (historyChart) {
                         historyChart.data.labels = filteredLabels;
-                        historyChart.data.datasets[0].data = normalDataset;
-                        historyChart.data.datasets[1].data = warningDataset;
-                        historyChart.data.datasets[2].data = criticalDataset;
+                        historyChart.data.datasets[0].data = filteredData;
+                        
+                        // Add threshold lines
+                        const warningLineData = new Array(filteredLabels.length).fill(WARNING_TEMP);
+                        const criticalLineData = new Array(filteredLabels.length).fill(CRITICAL_TEMP);
+                        
+                        historyChart.data.datasets[1].data = warningLineData;
+                        historyChart.data.datasets[2].data = criticalLineData;
+                        
+                        // Update point colors based on temperature
+                        historyChart.data.datasets[0].borderColor = filteredData.map(value => {
+                            if (value >= CRITICAL_TEMP) return '#ef4444';
+                            if (value >= WARNING_TEMP) return '#f59e0b';
+                            return '#10b981';
+                        });
+                        
+                        historyChart.data.datasets[0].pointBackgroundColor = filteredData.map(value => {
+                            if (value >= CRITICAL_TEMP) return '#ef4444';
+                            if (value >= WARNING_TEMP) return '#f59e0b';
+                            return '#10b981';
+                        });
+                        
                         historyChart.update();
                     }
                     
-                    // Show statistics
-                    const normalCount = groupedData.normal.length;
-                    const warningCount = groupedData.warning.length;
-                    const criticalCount = groupedData.critical.length;
-                    showNotification(`Showing ${filteredLabels.length} time points: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical`, 'success');
+                    // Calculate statistics
+                    const criticalCount = filteredData.filter(t => t >= CRITICAL_TEMP).length;
+                    const warningCount = filteredData.filter(t => t >= WARNING_TEMP && t < CRITICAL_TEMP).length;
+                    const normalCount = filteredData.filter(t => t < WARNING_TEMP).length;
+                    
+                    showNotification(`Showing ${filteredLabels.length} data points: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical`, 'success');
                 } else {
                     if (historyChart) {
                         historyChart.data.labels = [];
@@ -2293,19 +2301,15 @@ if (isset($_GET['action'])) {
 
         // Initialize
         window.onload = function() {
-            // Initialize enhanced live chart
             initLiveChart();
             
-            // Start temperature monitoring
             getTemperature();
             
-            // Set up auto-refresh for temperature (every 5 minutes as requested)
             temperatureUpdateInterval = setInterval(getTemperature, AUTO_REFRESH_MS);
             
-            // Initialize with some demo data
             const now = new Date();
             for (let i = 0; i < 8; i++) {
-                const time = new Date(now.getTime() - (8 - i) * 5 * 60000); // 5 minute intervals
+                const time = new Date(now.getTime() - (8 - i) * 5 * 60000);
                 const timeStr = time.getHours().toString().padStart(2, '0') + ':' + 
                               time.getMinutes().toString().padStart(2, '0');
                 chartData.labels.push(timeStr);
@@ -2323,16 +2327,13 @@ if (isset($_GET['action'])) {
                 addFixedThresholdLines();
             }
             
-            // Add resize listener
             window.addEventListener('resize', handleResize);
             
-            // Handle mobile orientation change
             window.addEventListener('orientationchange', function() {
                 setTimeout(handleResize, 100);
             });
         };
         
-        // Cleanup on page unload
         window.addEventListener('beforeunload', function() {
             if (temperatureUpdateInterval) {
                 clearInterval(temperatureUpdateInterval);
