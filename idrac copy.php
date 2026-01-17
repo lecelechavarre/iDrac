@@ -83,7 +83,7 @@ function get_temp_status($temp): string {
     return 'NORMAL';
 }
 
-// =============== ENHANCED EMAIL FUNCTIONS ===============
+// =============== EMAIL FUNCTIONS ===============
 function send_email(string $subject, string $message): bool {
     global $CONFIG;
     
@@ -594,5 +594,6 @@ if (isset($_GET['action'])) {
     </script>
 </body>
 </html>
+
 
 
