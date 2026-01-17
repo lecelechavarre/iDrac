@@ -1,6 +1,6 @@
 <?php
 // iDRAC Temperature Monitor - Standalone Version
-// Include configuration
+// Include configuration 
 require_once __DIR__ . '/idrac_config.php';
 
 date_default_timezone_set($CONFIG['timezone']);
@@ -594,3 +594,4 @@ if (isset($_GET['action'])) {
     </script>
 </body>
 </html>
+
