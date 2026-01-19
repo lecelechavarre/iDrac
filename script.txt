@@ -1,0 +1,816 @@
+<script>
+    // =============== ENHANCED GRAPH CONFIGURATION ===============
+    const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes
+    const WARNING_TEMP = <?php echo $CONFIG['warning_temp']; ?>;
+    const CRITICAL_TEMP = <?php echo $CONFIG['critical_temp']; ?>;
+    
+    let liveChart = null;
+    let historyChart = null;
+    let currentTemp = null;
+    let currentStatus = 'UNKNOWN';
+    let chartData = {
+        labels: [],
+        data: [],
+        status: []
+    };
+    let liveLogsInterval = null;
+    let temperatureUpdateInterval = null;
+
+    // Initialize Enhanced Live Chart with Fixed Threshold Lines
+    function initLiveChart() {
+        const ctx = document.getElementById('liveChart').getContext('2d');
+        
+        // Create gradient for chart area
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0.05)');
+        
+        liveChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [
+                    {
+                        label: 'Temperature',
+                        data: chartData.data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: function(context) {
+                            const value = context.dataset.data[context.dataIndex];
+                            if (value >= CRITICAL_TEMP) return '#ef4444';
+                            if (value >= WARNING_TEMP) return '#f59e0b';
+                            return '#10b981';
+                        },
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointHitRadius: 8
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#cbd5e1',
+                        borderColor: '#475569',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        padding: 12,
+                        callbacks: {
+                            // CONDITION 1 FIXED: Only show temperature without warning/critical text
+                            label: function(context) {
+                                const value = Math.round(context.parsed.y);
+                                return `Temperature: ${value}°C`;
+                            },
+                            // Remove afterLabel completely
+                            afterLabel: null
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(71, 85, 105, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: {
+                                size: 10,
+                                weight: '500'
+                            },
+                            maxTicksLimit: 8,
+                            padding: 5
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(71, 85, 105, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: {
+                                size: 10,
+                                weight: '500'
+                            },
+                            callback: function(value) {
+                                return Math.round(value) + '°C';
+                            },
+                            padding: 10
+                        },
+                        suggestedMin: 0,
+                        suggestedMax: Math.max(CRITICAL_TEMP + 10, 40)
+                    }
+                },
+                animation: {
+                    duration: 500,
+                    easing: 'easeOutQuart'
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+        
+        // Add FIXED threshold lines
+        addFixedThresholdLines();
+    }
+
+    function addFixedThresholdLines() {
+        if (!liveChart) return;
+        
+        const labelCount = chartData.labels.length || 10;
+        const warningLineData = new Array(labelCount).fill(WARNING_TEMP);
+        const criticalLineData = new Array(labelCount).fill(CRITICAL_TEMP);
+        
+        // Add warning line - NO HOVER TEXT, NO TOOLTIPS
+        liveChart.data.datasets.push({
+            label: 'Warning Threshold',
+            data: warningLineData,
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tooltip: {
+                enabled: false
+            },
+            hover: {
+                mode: null
+            }
+        });
+        
+        // Add critical line - NO HOVER TEXT, NO TOOLTIPS
+        liveChart.data.datasets.push({
+            label: 'Critical Threshold',
+            data: criticalLineData,
+            borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tooltip: {
+                enabled: false
+            },
+            hover: {
+                mode: null
+            }
+        });
+        
+        liveChart.update('none');
+    }
+
+    // Update Live Chart with new temperature
+    function updateLiveChart(temp, timestamp) {
+        if (!liveChart) return;
+        
+        const timeLabel = timestamp.split(' ')[1].substring(0, 5);
+        
+        chartData.labels.push(timeLabel);
+        chartData.data.push(temp);
+        
+        let status = 'NORMAL';
+        if (temp >= CRITICAL_TEMP) status = 'CRITICAL';
+        else if (temp >= WARNING_TEMP) status = 'WARNING';
+        chartData.status.push(status);
+        
+        if (liveChart.data.datasets.length > 1) {
+            liveChart.data.datasets[1].data.push(WARNING_TEMP);
+            liveChart.data.datasets[2].data.push(CRITICAL_TEMP);
+        }
+        
+        let maxPoints = 15;
+        if (window.innerWidth >= 768 && window.innerWidth < 1024) maxPoints = 25;
+        if (window.innerWidth >= 1024) maxPoints = 30;
+        
+        if (chartData.labels.length > maxPoints) {
+            chartData.labels.shift();
+            chartData.data.shift();
+            chartData.status.shift();
+            if (liveChart.data.datasets.length > 1) {
+                liveChart.data.datasets[1].data.shift();
+                liveChart.data.datasets[2].data.shift();
+            }
+        }
+        
+        liveChart.data.labels = [...chartData.labels];
+        liveChart.data.datasets[0].data = [...chartData.data];
+        
+        liveChart.data.datasets[0].pointBackgroundColor = chartData.data.map((value, index) => {
+            const status = chartData.status[index];
+            if (status === 'CRITICAL') return '#ef4444';
+            if (status === 'WARNING') return '#f59e0b';
+            return '#10b981';
+        });
+        
+        if (liveChart.data.datasets.length > 1) {
+            const warningData = new Array(chartData.labels.length).fill(WARNING_TEMP);
+            const criticalData = new Array(chartData.labels.length).fill(CRITICAL_TEMP);
+            liveChart.data.datasets[1].data = warningData;
+            liveChart.data.datasets[2].data = criticalData;
+        }
+        
+        const maxTemp = Math.max(...chartData.data);
+        if (maxTemp > liveChart.options.scales.y.suggestedMax - 5) {
+            liveChart.options.scales.y.suggestedMax = Math.max(CRITICAL_TEMP + 10, maxTemp + 5);
+        }
+        
+        liveChart.update({
+            duration: 500,
+            easing: 'easeOutQuart'
+        });
+    }
+
+    // Temperature Functions (UNCHANGED)
+    async function getTemperature() {
+        try {
+            const response = await fetch('?action=get_temp');
+            const data = await response.json();
+
+            if (data.success) {
+                currentTemp = data.temperature;
+                currentStatus = data.status;
+                
+                const tempEl = document.getElementById('temperature');
+                tempEl.textContent = Math.round(data.temperature) + ' °C';
+                tempEl.className = 'temp-display temp-' + data.status.toLowerCase();
+                
+                const statusEl = document.getElementById('statusIndicator');
+                statusEl.textContent = data.status;
+                statusEl.className = 'status ' + data.status.toLowerCase();
+                
+                document.getElementById('lastUpdate').textContent = 'Last updated: ' + (data.timestamp || '');
+                
+                updateStats(data.temperature);
+                
+                updateLiveChart(data.temperature, data.timestamp);
+                
+                await sendTempToLog(data.temperature);
+            }
+        } catch (error) {
+            console.error('Error getting temperature:', error);
+        }
+    }
+
+    function updateStats(currentTemp) {
+        if (currentTemp && !isNaN(currentTemp)) {
+            const temp = parseFloat(currentTemp);
+            const minTemp = Math.max(0, temp - 2);
+            const avgTemp = temp;
+            const maxTemp = temp + 3;
+            
+            document.getElementById('minTemp').textContent = Math.round(minTemp) + '°C';
+            document.getElementById('avgTemp').textContent = Math.round(avgTemp) + '°C';
+            document.getElementById('maxTemp').textContent = Math.round(maxTemp) + '°C';
+        }
+    }
+
+    // Modal Functions
+    function openLogsModal() {
+        document.getElementById('logsModal').style.display = 'flex';
+        showModalTab('live');
+        refreshLiveLogs();
+        startLiveLogsRefresh();
+    }
+
+    function closeLogsModal() {
+        document.getElementById('logsModal').style.display = 'none';
+        stopLiveLogsRefresh();
+    }
+
+    function showModalTab(tabName) {
+        document.querySelectorAll('.modal-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        document.getElementById('live-tab').style.display = 'none';
+        document.getElementById('history-tab').style.display = 'none';
+        document.getElementById('graph-tab').style.display = 'none';
+        
+        document.getElementById(tabName + '-tab').style.display = 'block';
+        
+        if (tabName === 'history') {
+            document.getElementById('historyStartDate').value = getDateString(-7);
+            document.getElementById('historyEndDate').value = getDateString(0);
+        } else if (tabName === 'graph') {
+            document.getElementById('graphStartDate').value = getDateString(-7);
+            document.getElementById('graphEndDate').value = getDateString(0);
+            if (!historyChart) {
+                initEnhancedHistoryChart();
+            }
+        }
+    }
+
+    function getDateString(daysOffset) {
+        const date = new Date();
+        date.setDate(date.getDate() + daysOffset);
+        return date.toISOString().split('T')[0];
+    }
+
+    // Logs Functions
+    async function refreshLiveLogs() {
+        try {
+            const response = await fetch('?action=get_storage_logs');
+            const data = await response.json();
+            
+            if (data.success && data.logs.length > 0) {
+                const tbody = document.getElementById('liveLogsBody');
+                tbody.innerHTML = data.logs.slice().reverse().slice(0, 30).map(log => `
+                    <tr>
+                        <td>${log.timestamp}</td>
+                        <td><strong>${Math.round(log.temperature)}°C</strong></td>
+                        <td>
+                            <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
+                                ${getStatusText(log.temperature)}
+                            </span>
+                        </td>
+                        <td><code style="font-size: 10px;">${log.ip}</code></td>
+                    </tr>
+                `).join('');
+            } else {
+                document.getElementById('liveLogsBody').innerHTML = 
+                    '<tr><td colspan="4" style="text-align: center; padding: 30px;">No logs available</td></tr>';
+            }
+        } catch (error) {
+            console.error('Error loading live logs:', error);
+        }
+    }
+
+    function startLiveLogsRefresh() {
+        if (liveLogsInterval) clearInterval(liveLogsInterval);
+        liveLogsInterval = setInterval(refreshLiveLogs, 5000);
+    }
+
+    function stopLiveLogsRefresh() {
+        if (liveLogsInterval) {
+            clearInterval(liveLogsInterval);
+            liveLogsInterval = null;
+        }
+    }
+
+    async function loadHistoryLogs() {
+        const startDate = document.getElementById('historyStartDate').value;
+        const endDate = document.getElementById('historyEndDate').value;
+        
+        if (!startDate || !endDate) {
+            showNotification('Please select both start and end dates', 'error');
+            return;
+        }
+        
+        showLoading(true);
+        try {
+            const response = await fetch(`?action=get_filtered_logs&start_date=${startDate}&end_date=${endDate}`);
+            const data = await response.json();
+            
+            if (data.success && data.logs.length > 0) {
+                const tbody = document.getElementById('historyLogsBody');
+                tbody.innerHTML = data.logs.slice().reverse().map(log => `
+                    <tr>
+                        <td>${log.timestamp}</td>
+                        <td><strong>${Math.round(log.temperature)}°C</strong></td>
+                        <td>
+                            <span class="status ${getStatusClass(log.temperature)}" style="padding: 3px 8px; font-size: 10px;">
+                                ${getStatusText(log.temperature)}
+                            </span>
+                        </td>
+                        <td><code style="font-size: 10px;">${log.ip}</code></td>
+                    </tr>
+                `).join('');
+                showNotification(`Found ${data.logs.length} logs for selected date range`, 'success');
+            } else {
+                document.getElementById('historyLogsBody').innerHTML = 
+                    '<tr><td colspan="4" style="text-align: center; padding: 30px;">No logs found for selected date range</td></tr>';
+                showNotification('No logs found for selected date range', 'error');
+            }
+        } catch (error) {
+            console.error('Error loading history logs:', error);
+            showNotification('Error loading history logs', 'error');
+        }
+        showLoading(false);
+    }
+
+    // CONDITION 3: ENHANCED History Graph with Combined Color Lines
+    function initEnhancedHistoryChart() {
+        const ctx = document.getElementById('historyChart').getContext('2d');
+        
+        historyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Temperature',
+                        data: [],
+                        borderColor: function(context) {
+                            const value = context.dataset.data[context.dataIndex];
+                            if (value !== null) {
+                                if (value >= CRITICAL_TEMP) return '#ef4444';
+                                if (value >= WARNING_TEMP) return '#f59e0b';
+                                return '#10b981';
+                            }
+                            return '#3b82f6';
+                        },
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: function(context) {
+                            const value = context.dataset.data[context.dataIndex];
+                            if (value !== null) {
+                                if (value >= CRITICAL_TEMP) return '#ef4444';
+                                if (value >= WARNING_TEMP) return '#f59e0b';
+                                return '#10b981';
+                            }
+                            return '#3b82f6';
+                        },
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: '#cbd5e1',
+                            font: {
+                                size: 12,
+                                weight: '600'
+                            },
+                            padding: 15,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            boxWidth: 10,
+                            boxHeight: 10
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#cbd5e1',
+                        borderColor: '#475569',
+                        borderWidth: 1,
+                        cornerRadius: 6,
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const value = Math.round(context.parsed.y);
+                                let status = 'Normal';
+                                if (value >= CRITICAL_TEMP) status = 'Critical';
+                                else if (value >= WARNING_TEMP) status = 'Warning';
+                                return `Temperature: ${value}°C (${status})`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(71, 85, 105, 0.2)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: {
+                                size: 10
+                            },
+                            maxTicksLimit: 12
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(71, 85, 105, 0.2)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                return Math.round(value) + '°C';
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+        
+        // Add threshold lines to history chart
+        addHistoryThresholdLines();
+    }
+
+    function addHistoryThresholdLines() {
+        if (!historyChart) return;
+        
+        // Add warning threshold line
+        historyChart.data.datasets.push({
+            label: 'Warning Threshold',
+            data: [],
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tooltip: {
+                enabled: false
+            }
+        });
+        
+        // Add critical threshold line
+        historyChart.data.datasets.push({
+            label: 'Critical Threshold',
+            data: [],
+            borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tooltip: {
+                enabled: false
+            }
+        });
+        
+        historyChart.update('none');
+    }
+
+    async function loadHistoryGraph() {
+        const startDate = document.getElementById('graphStartDate').value;
+        const endDate = document.getElementById('graphEndDate').value;
+        
+        if (!startDate || !endDate) {
+            showNotification('Please select both start and end dates', 'error');
+            return;
+        }
+        
+        showLoading(true);
+        try {
+            const response = await fetch(`?action=get_graph_data&start_date=${startDate}&end_date=${endDate}`);
+            const data = await response.json();
+            
+            if (data.success && data.data.length > 0) {
+                const labels = [];
+                const temperatureData = [];
+                
+                // Sort data by timestamp
+                data.data.sort((a, b) => new Date(a.x) - new Date(b.x));
+                
+                // Prepare data
+                data.data.forEach(item => {
+                    const date = new Date(item.x);
+                    const label = date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + 
+                                 date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    labels.push(label);
+                    temperatureData.push(Math.round(item.y));
+                });
+                
+                // Limit labels for performance
+                const maxPoints = window.innerWidth < 768 ? 50 : 100;
+                const step = Math.ceil(labels.length / maxPoints);
+                const filteredLabels = [];
+                const filteredData = [];
+                
+                for (let i = 0; i < labels.length; i += step) {
+                    filteredLabels.push(labels[i]);
+                    filteredData.push(temperatureData[i]);
+                }
+                
+                // Ensure we have at least 10 labels
+                if (filteredLabels.length < 10 && labels.length > 10) {
+                    const startIdx = Math.max(0, labels.length - 10);
+                    for (let i = startIdx; i < labels.length; i++) {
+                        if (!filteredLabels.includes(labels[i])) {
+                            filteredLabels.push(labels[i]);
+                            filteredData.push(temperatureData[i]);
+                        }
+                    }
+                    
+                    // Sort chronologically
+                    const combined = filteredLabels.map((label, idx) => ({
+                        label,
+                        data: filteredData[idx],
+                        timestamp: new Date(label.replace(/(\w+ \d+), (\d+:\d+)/, '$1 $2'))
+                    }));
+                    
+                    combined.sort((a, b) => a.timestamp - b.timestamp);
+                    
+                    filteredLabels.length = 0;
+                    filteredData.length = 0;
+                    
+                    combined.forEach(item => {
+                        filteredLabels.push(item.label);
+                        filteredData.push(item.data);
+                    });
+                }
+                
+                if (historyChart) {
+                    historyChart.data.labels = filteredLabels;
+                    historyChart.data.datasets[0].data = filteredData;
+                    
+                    // Add threshold lines
+                    const warningLineData = new Array(filteredLabels.length).fill(WARNING_TEMP);
+                    const criticalLineData = new Array(filteredLabels.length).fill(CRITICAL_TEMP);
+                    
+                    if (historyChart.data.datasets.length < 2) {
+                        addHistoryThresholdLines();
+                    }
+                    
+                    historyChart.data.datasets[1].data = warningLineData;
+                    historyChart.data.datasets[2].data = criticalLineData;
+                    
+                    // Update point colors based on temperature
+                    historyChart.data.datasets[0].borderColor = filteredData.map(value => {
+                        if (value >= CRITICAL_TEMP) return '#ef4444';
+                        if (value >= WARNING_TEMP) return '#f59e0b';
+                        return '#10b981';
+                    });
+                    
+                    historyChart.data.datasets[0].pointBackgroundColor = filteredData.map(value => {
+                        if (value >= CRITICAL_TEMP) return '#ef4444';
+                        if (value >= WARNING_TEMP) return '#f59e0b';
+                        return '#10b981';
+                    });
+                    
+                    historyChart.update();
+                }
+                
+                // Calculate statistics
+                const criticalCount = filteredData.filter(t => t >= CRITICAL_TEMP).length;
+                const warningCount = filteredData.filter(t => t >= WARNING_TEMP && t < CRITICAL_TEMP).length;
+                const normalCount = filteredData.filter(t => t < WARNING_TEMP).length;
+                
+                showNotification(`Showing ${filteredLabels.length} data points: ${normalCount} Normal, ${warningCount} Warning, ${criticalCount} Critical`, 'success');
+            } else {
+                if (historyChart) {
+                    historyChart.data.labels = [];
+                    historyChart.data.datasets[0].data = [];
+                    if (historyChart.data.datasets.length > 1) {
+                        historyChart.data.datasets[1].data = [];
+                        historyChart.data.datasets[2].data = [];
+                    }
+                    historyChart.update();
+                }
+                showNotification('No data found for selected date range', 'error');
+            }
+        } catch (error) {
+            console.error('Error loading history graph:', error);
+            showNotification('Error loading history graph', 'error');
+        }
+        showLoading(false);
+    }
+
+    // Download Functions (UNCHANGED)
+    function downloadCSV() {
+        window.open('?action=download_logs&type=csv', '_blank');
+    }
+
+    function downloadLogFile() {
+        window.open('?action=download_logs&type=storage', '_blank');
+    }
+
+    function downloadFilteredCSV() {
+        const startDate = document.getElementById('historyStartDate').value;
+        const endDate = document.getElementById('historyEndDate').value;
+        
+        if (!startDate || !endDate) {
+            showNotification('Please select date range first', 'error');
+            return;
+        }
+        
+        showNotification('Downloading CSV data', 'success');
+        setTimeout(() => {
+            downloadCSV();
+        }, 500);
+    }
+
+    function downloadFilteredLogFile() {
+        const startDate = document.getElementById('historyStartDate').value;
+        const endDate = document.getElementById('historyEndDate').value;
+        
+        if (!startDate || !endDate) {
+            showNotification('Please select date range first', 'error');
+            return;
+        }
+        
+        showNotification('Downloading log file', 'success');
+        setTimeout(() => {
+            downloadLogFile();
+        }, 500);
+    }
+
+    // Utility Functions (UNCHANGED)
+    function getStatusClass(temp) {
+        if (temp >= CRITICAL_TEMP) return 'critical';
+        if (temp >= WARNING_TEMP) return 'warning';
+        return 'normal';
+    }
+
+    function getStatusText(temp) {
+        if (temp >= CRITICAL_TEMP) return 'CRITICAL';
+        if (temp >= WARNING_TEMP) return 'WARNING';
+        return 'NORMAL';
+    }
+
+    function showNotification(message, type) {
+        const el = document.getElementById('notification');
+        el.textContent = message;
+        el.style.display = 'block';
+        el.className = 'notification' + (type === 'error' ? ' error' : '');
+        el.style.borderLeftColor = type === 'success' ? '#10b981' : '#ef4444';
+        
+        setTimeout(() => {
+            el.style.display = 'none';
+        }, 3000);
+    }
+
+    function showLoading(show) {
+        document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+
+    async function sendTempToLog(temp) {
+        const payload = { temp };
+        try {
+            await fetch('./api/log_temp.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (err) {
+            console.error('Failed to send temp to log:', err);
+        }
+    }
+
+    // Handle window resize for responsive adjustments
+    function handleResize() {
+        if (liveChart) {
+            liveChart.resize();
+        }
+        if (historyChart) {
+            historyChart.resize();
+        }
+    }
+
+    // Initialize - CLEAN VERSION WITHOUT DEMO DATA
+    window.onload = function() {
+        // Initialize the chart with empty data
+        initLiveChart();
+        
+        // Get initial temperature reading
+        getTemperature();
+        
+        // Set up auto-refresh for temperature (every 5 minutes)
+        temperatureUpdateInterval = setInterval(getTemperature, AUTO_REFRESH_MS);
+        
+        // Add resize listener
+        window.addEventListener('resize', handleResize);
+        
+        // Handle mobile orientation change
+        window.addEventListener('orientationchange', function() {
+            setTimeout(handleResize, 100);
+        });
+    };
+    
+    window.addEventListener('beforeunload', function() {
+        if (temperatureUpdateInterval) {
+            clearInterval(temperatureUpdateInterval);
+        }
+        if (liveLogsInterval) {
+            clearInterval(liveLogsInterval);
+        }
+    });
+</script>
