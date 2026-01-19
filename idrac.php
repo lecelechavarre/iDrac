@@ -1527,7 +1527,7 @@ if (isset($_GET['action'])) {
 
     <script>
         // =============== ENHANCED GRAPH CONFIGURATION ===============
-        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes (CHANGED AS REQUESTED)
+        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes
         const WARNING_TEMP = <?php echo $CONFIG['warning_temp']; ?>;
         const CRITICAL_TEMP = <?php echo $CONFIG['critical_temp']; ?>;
         
@@ -2281,7 +2281,7 @@ if (isset($_GET['action'])) {
             try {
                 await fetch('./api/log_temp.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type: 'application/json' },
                     body: JSON.stringify(payload)
                 });
             } catch (err) {
@@ -2299,36 +2299,21 @@ if (isset($_GET['action'])) {
             }
         }
 
-        // Initialize
+        // Initialize - CLEANED UP VERSION WITHOUT DEMO DATA
         window.onload = function() {
+            // Initialize the chart with empty data
             initLiveChart();
             
+            // Get initial temperature reading
             getTemperature();
             
+            // Set up auto-refresh for temperature (every 5 minutes)
             temperatureUpdateInterval = setInterval(getTemperature, AUTO_REFRESH_MS);
             
-            const now = new Date();
-            for (let i = 0; i < 8; i++) {
-                const time = new Date(now.getTime() - (8 - i) * 5 * 60000);
-                const timeStr = time.getHours().toString().padStart(2, '0') + ':' + 
-                              time.getMinutes().toString().padStart(2, '0');
-                chartData.labels.push(timeStr);
-                const temp = 20 + Math.random() * 5;
-                chartData.data.push(temp);
-                
-                let status = 'NORMAL';
-                if (temp >= CRITICAL_TEMP) status = 'CRITICAL';
-                else if (temp >= WARNING_TEMP) status = 'WARNING';
-                chartData.status.push(status);
-            }
-            
-            if (liveChart) {
-                liveChart.update();
-                addFixedThresholdLines();
-            }
-            
+            // Add resize listener
             window.addEventListener('resize', handleResize);
             
+            // Handle mobile orientation change
             window.addEventListener('orientationchange', function() {
                 setTimeout(handleResize, 100);
             });
