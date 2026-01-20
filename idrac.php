@@ -1527,7 +1527,7 @@ if (isset($_GET['action'])) {
 
     <script>
         // =============== ENHANCED GRAPH CONFIGURATION ===============
-        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes
+        const AUTO_REFRESH_MS = 5 * 60000; // 5 minutes (CHANGED AS REQUESTED)
         const WARNING_TEMP = <?php echo $CONFIG['warning_temp']; ?>;
         const CRITICAL_TEMP = <?php echo $CONFIG['critical_temp']; ?>;
         
@@ -2281,7 +2281,7 @@ if (isset($_GET['action'])) {
             try {
                 await fetch('./api/log_temp.php', {
                     method: 'POST',
-                    headers: { 'Content-Type: 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
             } catch (err) {
@@ -2299,21 +2299,28 @@ if (isset($_GET['action'])) {
             }
         }
 
-        // Initialize - CLEANED UP VERSION WITHOUT DEMO DATA
+        // Initialize - **CRITICAL FIX FOR CONDITION 1**
         window.onload = function() {
             // Initialize the chart with empty data
             initLiveChart();
             
-            // Get initial temperature reading
+            // Get initial temperature immediately
             getTemperature();
             
-            // Set up auto-refresh for temperature (every 5 minutes)
+            // Set up auto-refresh for temperature (every 5 minutes as requested)
             temperatureUpdateInterval = setInterval(getTemperature, AUTO_REFRESH_MS);
             
-            // Add resize listener
+            // **REMOVED THE RANDOM DEMO DATA GENERATION COMPLETELY**
+            // The chart will now only show real temperature data from getTemperature()
+            
+            // Initialize with empty chart - real data will come from getTemperature()
+            if (liveChart) {
+                liveChart.update();
+                addFixedThresholdLines();
+            }
+            
             window.addEventListener('resize', handleResize);
             
-            // Handle mobile orientation change
             window.addEventListener('orientationchange', function() {
                 setTimeout(handleResize, 100);
             });
