@@ -2299,25 +2299,66 @@ if (isset($_GET['action'])) {
             }
         }
 
-        // Initialize - **CRITICAL FIX FOR CONDITION 1**
-        window.onload = function() {
-            // Initialize the chart with empty data
-            initLiveChart();
+        // **CRITICAL FIX: Initialize chart with REAL historical data instead of random data**
+        async function initializeChartWithRealData() {
+            try {
+                // Try to get recent temperature logs to populate the chart initially
+                const response = await fetch('?action=get_storage_logs');
+                const data = await response.json();
+                
+                if (data.success && data.logs.length > 0) {
+                    // Get the most recent logs (last 8 entries for the chart)
+                    const recentLogs = data.logs.slice(-8);
+                    
+                    // Clear any existing data
+                    chartData.labels = [];
+                    chartData.data = [];
+                    chartData.status = [];
+                    
+                    // Populate chart with real historical data
+                    recentLogs.forEach(log => {
+                        const date = new Date(log.timestamp);
+                        const timeLabel = date.getHours().toString().padStart(2, '0') + ':' + 
+                                        date.getMinutes().toString().padStart(2, '0');
+                        
+                        chartData.labels.push(timeLabel);
+                        chartData.data.push(log.temperature);
+                        
+                        let status = 'NORMAL';
+                        if (log.temperature >= CRITICAL_TEMP) status = 'CRITICAL';
+                        else if (log.temperature >= WARNING_TEMP) status = 'WARNING';
+                        chartData.status.push(status);
+                    });
+                    
+                    // Initialize the chart with real data
+                    initLiveChart();
+                    
+                    // Update the chart display
+                    if (liveChart) {
+                        liveChart.update();
+                        addFixedThresholdLines();
+                    }
+                } else {
+                    // If no historical data, initialize empty chart
+                    initLiveChart();
+                }
+            } catch (error) {
+                console.error('Error loading historical data for chart:', error);
+                // Fallback: initialize empty chart
+                initLiveChart();
+            }
+        }
+
+        // Initialize - **FIXED VERSION**
+        window.onload = async function() {
+            // Initialize chart with REAL historical data
+            await initializeChartWithRealData();
             
             // Get initial temperature immediately
-            getTemperature();
+            await getTemperature();
             
             // Set up auto-refresh for temperature (every 5 minutes as requested)
             temperatureUpdateInterval = setInterval(getTemperature, AUTO_REFRESH_MS);
-            
-            // **REMOVED THE RANDOM DEMO DATA GENERATION COMPLETELY**
-            // The chart will now only show real temperature data from getTemperature()
-            
-            // Initialize with empty chart - real data will come from getTemperature()
-            if (liveChart) {
-                liveChart.update();
-                addFixedThresholdLines();
-            }
             
             window.addEventListener('resize', handleResize);
             
